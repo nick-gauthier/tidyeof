@@ -16,6 +16,21 @@
 #'
 #' @examples
 get_climatology <- function(dat, monthly = FALSE) {
+  # Validate input
+  if (!inherits(dat, "stars")) {
+    stop("Input must be a stars object")
+  }
+
+  time_dim <- st_get_dimension_values(dat, "time")
+  if (!inherits(time_dim, c("Date", "POSIXct"))) {
+    stop("Time dimension must contain dates or timestamps")
+  }
+
+  if (monthly && length(time_dim) < 12) {
+    stop("Need at least 12 time points for monthly climatology")
+  }
+
+
   if (monthly) {
     new_mn <- aggregate(dat, by_months, FUN = mean) %>%
       aperm(c(2, 3, 1)) %>% # aggregate puts time dimension first
