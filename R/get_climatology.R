@@ -1,60 +1,88 @@
-#' Get annual or monthly means and standard deviations, or rescale a grid using climatology
+#' Compute climatological statistics for a spatial field
 #'
-#' @param dat Input data.
-#' @param monthly Calculate monthly climatology or anomalies instead of using
-#' the entire period? Defaults to FALSE.
-#' @param clim An optional climatology made with get_climatology().
-#' Defaults to NULL, in which case get_climatology() is called internally.
-#' @param scale Calculate standardized anomalies (x - mean) / sd? Defaults to
-#' FALSE.
+#' @param dat A stars object with two spatial dimensions and a temporal dimension
+#' @param cycle_length Integer length of the temporal cycle (e.g., 12 for monthly data).
+#'   If NULL, computes statistics over entire period (default).
 #'
-#' Based on the `climatology()` and `scaleGrid()` functions from transformeR.
-#' These functions apply calculations per grid cell.
-#'
-#' @return
-#' @export
+#' @return A stars object with:
+#'   - Original spatial dimensions (x, y)
+#'   - Group dimension (cycle positions or month names for monthly data)
+#'   - Statistic dimension (mean, sd)
+#'   Original units are preserved.
 #'
 #' @examples
-get_climatology <- function(dat, monthly = FALSE) {
-  # Validate input
+#' # Compute annual climatology
+#' clim <- get_climatology(temperature)
+#'
+#' # Compute monthly climatology
+#' monthly_clim <- get_climatology(temperature, cycle_length = 12)
+#'
+#' @export
+#'
+get_climatology <- function(dat, cycle_length = NULL) {
+  # Basic input validation
   if (!inherits(dat, "stars")) {
-    stop("Input must be a stars object")
+    stop("Input must be a stars object with at least 3 dimensions")
   }
 
-  time_dim <- st_get_dimension_values(dat, "time")
-  if (!inherits(time_dim, c("Date", "POSIXct"))) {
-    stop("Time dimension must contain dates or timestamps")
+  # Store original units
+  orig_units <- lapply(dat, function(x) {
+    if (inherits(x, "units")) units(x)
+  })
+
+  # Handle entire period climatology
+  if (is.null(cycle_length)) {
+    mean_result <- st_apply(dat, 1:2, mean, na.rm = TRUE)
+    sd_result <- st_apply(dat, 1:2, sd, na.rm = TRUE)
+
+    final <- c(mean = mean_result, sd = sd_result, along = "statistic") %>%
+      setNames(names(dat))
+  }
+  # Handle cyclic climatology
+  else {
+    # Validate cycle_length
+    n_periods <- dim(dat)[[3]]
+    if (cycle_length < 1 || cycle_length > n_periods || n_periods %% cycle_length != 0) {
+      stop("Invalid cycle_length. Must be positive and divide total periods evenly.")
+    }
+
+    # Split into cycles and compute statistics
+    positions <- seq_len(n_periods)
+    groups <- split(positions, (positions - 1) %% cycle_length + 1)
+
+    means <- lapply(groups, function(idx) {
+      st_apply(dat[,,,idx], 1:2, mean, na.rm = TRUE)
+    })
+    sds <- lapply(groups, function(idx) {
+      st_apply(dat[,,,idx], 1:2, sd, na.rm = TRUE)
+    })
+
+    # Set group names
+    group_names <- seq_len(cycle_length)
+    if (cycle_length == 12 &&
+        inherits(st_get_dimension_values(dat, "time"), c("Date", "POSIXct"))) {
+      group_names <- month.name
+    }
+
+    mean_result <- do.call(c, c(means, list(along = "group"))) %>%
+      st_set_dimensions("group", values = group_names)
+    sd_result <- do.call(c, c(sds, list(along = "group"))) %>%
+      st_set_dimensions("group", values = group_names)
+
+    final <- c(mean = mean_result, sd = sd_result, along = "statistic") %>%
+      setNames(names(dat))
   }
 
-  if (monthly && length(time_dim) < 12) {
-    stop("Need at least 12 time points for monthly climatology")
+  # Restore units
+  for (attr_name in names(dat)) {
+    if (!is.null(orig_units[[attr_name]])) {
+      final[[attr_name]] <- units::set_units(final[[attr_name]],
+                                             orig_units[[attr_name]],
+                                             mode = "standard")
+    }
   }
 
-
-  if (monthly) {
-    new_mn <- aggregate(dat, by_months, FUN = mean) %>%
-      aperm(c(2, 3, 1)) %>% # aggregate puts time dimension first
-      st_set_dimensions('geometry', names = 'month')
-
-    new_sd <- aggregate(dat, by_months, FUN = sd) %>%
-        aperm(c(2, 3, 1)) %>%
-        st_set_dimensions('geometry', names = 'month')
-
-  } else {
-    new_mn <- st_apply(dat, 1:2, FUN = mean, na.rm = TRUE, rename = FALSE)
-    new_sd <- st_apply(dat, 1:2, FUN = sd, na.rm = TRUE, rename = FALSE)
-  }
-
-  new <- c(mean = new_mn, stdev = new_sd, along = 'var') %>%
-    mutate()
-   #for some reason c.stars(,, along = 'var') drops dimnames from the underlying array, mutate restores them
-
-  if (any(purrr::map_lgl(dat, inherits, 'units'))) {
-    # do any of the attr. have units? if so, restore units
-    new <- restore_units(new, dat)
-  }
-
-  return(new)
+  return(final)
 }
 
 #' @export
@@ -107,6 +135,7 @@ by_months = function(x) {
 # should check that time is posix?
 sweep_months <- function(e1, e2, FUN) {
   FUN <- match.fun(FUN)
+
   purrr::map(1:12, ~ FUN(filter(e1, lubridate::month(time) == .x), abind::adrop(filter(e2, month == month.name[.x])))) %>%
     do.call(c, .) %>%
     slice(., 'time', order(time(.))) %>% # reshuffle so months/years in right order
