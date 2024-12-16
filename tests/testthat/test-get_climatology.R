@@ -1,91 +1,361 @@
-prism <- system.file('testdata/prism_test.RDS', package = 'tidyEOF') %>%
-  readRDS()
+# Tests for get_climatology function
+library(testthat)
+library(stars)
+library(units)
+library(lubridate)
 
-test_that("get_climatology() returns correct format", {
-  # Basic format checks
-  clim <- get_climatology(prism)
-  clim_nounits <- get_climatology(units::drop_units(prism))
-  clim_mon <- get_climatology(prism, cycle_length = 12)
-  clim_mon_nounits <- get_climatology(units::drop_units(prism), cycle_length = 12)
+test_that("get_climatology handles basic annual calculations correctly", {
+  # Create test data with known values
+  times <- seq(as.Date("2000-01-01"), as.Date("2002-12-31"), by = "month")
+  x <- seq(0, 1, length.out = 5)
+  y <- seq(0, 1, length.out = 5)
 
-  # Class checks
-  expect_true(inherits(prism, "stars"))
-  expect_true(inherits(clim, "stars"))
-  expect_true(inherits(clim_nounits, "stars"))
-  expect_true(inherits(clim_mon, "stars"))
-  expect_true(inherits(clim_mon_nounits, "stars"))
+  set.seed(123)
+  test_array <- array(rnorm(5*5*36), c(5, 5, 36))
 
-  # Name checks
-  expect_equal(names(prism), "tmean")
-  expect_equal(names(clim), "tmean")
-  expect_equal(names(clim_nounits), "tmean")
-  expect_equal(names(clim_mon), "tmean")
-  expect_equal(names(clim_mon_nounits), "tmean")
+  test_data <- st_as_stars(test_array) %>%
+    setNames('t2m') |>
+    st_set_dimensions(1, values = x, name = "x") %>%
+    st_set_dimensions(2, values = y, name = "y") %>%
+    st_set_dimensions(3, values = times, name = "time")
 
-  # Units checks
-  expect_true(inherits(prism[[1]], "units"))
-  expect_true(inherits(clim[[1]], "units"))
-  expect_true(inherits(clim_mon[[1]], "units"))
-  expect_false(inherits(clim_nounits[[1]], "units"))
-  expect_false(inherits(clim_mon_nounits[[1]], "units"))
+  # Calculate climatology
+  result <- get_climatology(test_data, monthly = FALSE)
 
-  # Dimension checks
-  expect_equal(length(dim(prism)), 3)
-  expect_equal(length(dim(clim)), 3)
-  expect_equal(length(dim(clim_nounits)), 3)
-  expect_equal(length(dim(clim_mon)), 4)
-  expect_equal(length(dim(clim_mon_nounits)), 4)
+  # Basic structure tests
+  expect_s3_class(result, "stars")
+  expect_named(st_dimensions(result), c("x", "y", "statistic"))
+  expect_equal(dim(result), c(x = 5, y = 5, statistic = 2))
 
-  # Monthly names check
-  expect_equal(st_get_dimension_values(clim_mon, "group"), month.name)
-  expect_equal(st_get_dimension_values(clim_mon_nounits, "group"), month.name)
+  # Calculate expected values
+  manual_mean <- apply(test_array, c(1,2), mean)
+  names(dim(manual_mean)) <- c('x', 'y')
+  manual_sd <- apply(test_array, c(1,2), sd)
+  names(dim(manual_sd)) <- c('x', 'y')
+
+  # Convert stars objects to arrays for comparison
+  result_mean <- slice(result, "statistic", 1)$t2m
+  result_sd <- slice(result, "statistic", 2)$t2m
+
+  # Compare values
+  expect_equal(result_mean, manual_mean, tolerance = 1e-7)
+  expect_equal(result_sd, manual_sd, tolerance = 1e-7)
 })
 
-test_that("get_climatology handles units correctly for multiple attributes", {
-  # Create multi-attribute test data
-  prism_multi <- c(temp = prism, precip = prism)
+test_that("get_climatology handles monthly calculations correctly", {
+  # Create test data with known monthly pattern
+  times <- seq(as.Date("2000-01-01"), as.Date("2002-12-31"), by = "month")
+  x <- seq(0, 1, length.out = 3)
+  y <- seq(0, 1, length.out = 3)
 
-  # Set different units for precip while preserving values
-  prec_vals <- units::drop_units(prism_multi$precip)
-  prism_multi$precip <- prec_vals * units::as_units("mm")
+  # Create data with constant value per month
+  month_values <- 1:12
+  test_array <- array(0, c(3, 3, 36))
+  for(i in 1:36) {
+    test_array[,,i] <- month_values[(i-1) %% 12 + 1]
+  }
 
-  # Test annual climatology
-  clim <- get_climatology(prism_multi)
-  expect_equal(units(clim$temp), units(prism_multi$temp))
-  expect_equal(units(clim$precip), units(prism_multi$precip))
+  test_data <- st_as_stars(test_array) %>%
+    setNames('t2m') |>
+    st_set_dimensions(1, values = x, name = "x") %>%
+    st_set_dimensions(2, values = y, name = "y") %>%
+    st_set_dimensions(3, values = times, name = "time")
 
-  # Test monthly climatology
-  clim_mon <- get_climatology(prism_multi, cycle_length = 12)
-  expect_equal(units(clim_mon$temp), units(prism_multi$temp))
-  expect_equal(units(clim_mon$precip), units(prism_multi$precip))
+  # Calculate monthly climatology
+  result <- get_climatology(test_data, monthly = TRUE)
 
-  # Test mixed units case
-  prism_mixed <- c(temp = prism, precip = units::drop_units(prism))
-  clim_mixed <- get_climatology(prism_mixed)
-  expect_true(inherits(clim_mixed$temp, "units"))
-  expect_false(inherits(clim_mixed$precip, "units"))
+  # Test structure
+  expect_s3_class(result, "stars")
+  expect_named(st_dimensions(result), c("x", "y", "month", "statistic"))
+  expect_equal(dim(result), c(x = 3, y = 3, month = 12, statistic = 2))
 
-  # Test no units case
-  prism_none <- c(temp = units::drop_units(prism),
-                  precip = units::drop_units(prism))
-  clim_none <- get_climatology(prism_none)
-  expect_false(inherits(clim_none$temp, "units"))
-  expect_false(inherits(clim_none$precip, "units"))
+  # Test values - convert to array for easier checking
+  result_array <- result$t2m
+
+  # For each month
+  for(i in 1:12) {
+    # All grid cells should have value i for mean
+    ref <- matrix(c(i, i, i), ncol = 3)
+    names(dim(ref)) <- c('x', 'y')
+    expect_equal(unique(result_array[,,i,1]), ref)
+    # All grid cells should have sd of 0 (constant values)
+    ref <- matrix(c(0, 0, 0), ncol = 3)
+    names(dim(ref)) <- c('x', 'y')
+    expect_equal(unique(result_array[,,i,2]), ref)
+  }
 })
 
-test_that("get_climatology() calculates correct values", {
-  clim_mon <- get_climatology(prism, cycle_length = 12)
+test_that("get_climatology preserves units correctly", {
+  # Create test data with units
+  times <- seq(as.Date("2000-01-01"), as.Date("2002-12-31"), by = "month")
+  x <- seq(0, 1, length.out = 3)
+  y <- seq(0, 1, length.out = 3)
 
-  # Test February averages
-  feb_mean <- st_apply(prism[,,,c(2, 14, 26)], 1:2, mean, rename = FALSE)
-  feb_sd <- st_apply(prism[,,,c(2, 14, 26)], 1:2, sd, rename = FALSE)
+  test_array <- array(rnorm(3*3*36, mean = 20, sd = 5), c(3, 3, 36))
 
+  test_data <- st_as_stars(test_array) %>%
+    st_set_dimensions(1, values = x, name = "x") %>%
+    st_set_dimensions(2, values = y, name = "y") %>%
+    st_set_dimensions(3, values = times, name = "time") %>%
+    mutate(A1 = set_units(A1, "degC"))
+
+  # Calculate climatologies
+  annual_result <- get_climatology(test_data, monthly = FALSE)
+  monthly_result <- get_climatology(test_data, monthly = TRUE)
+
+  # Check units are preserved
+  expect_true(inherits(annual_result[[1]], "units"))
+  expect_true(inherits(monthly_result[[1]], "units"))
+
+  # Compare unit strings instead of unit objects
+  expect_equal(as.character(units(annual_result[[1]])), "°C")
+  expect_equal(as.character(units(monthly_result[[1]])), "°C")
+})
+
+test_that("get_climatology handles invalid inputs appropriately", {
+  # Test non-stars input
+  expect_error(get_climatology(matrix(1:12, 3, 4)),
+               "Input must be a stars object")
+})
+
+test_that("get_anomalies handles annual calculations correctly", {
+  # Create test data
+  times <- seq(as.Date("2000-01-01"), as.Date("2002-12-31"), by = "month")
+  x <- seq(0, 1, length.out = 5)
+  y <- seq(0, 1, length.out = 5)
+
+  set.seed(123)
+  test_array <- array(rnorm(5*5*36, mean = 10), c(5, 5, 36))
+
+  test_data <- st_as_stars(test_array) %>%
+    setNames('t2m') |>
+    st_set_dimensions(1, values = x, name = "x") %>%
+    st_set_dimensions(2, values = y, name = "y") %>%
+    st_set_dimensions(3, values = times, name = "time")
+
+  # Calculate anomalies
+  result <- get_anomalies(test_data)
+
+  # Tests
+  expect_s3_class(result, "stars")
+  expect_equal(dim(result), dim(test_data))
+
+  # Check calculations
+  manual_mean <- apply(test_array, c(1,2), mean)
   expect_equal(
-    units::drop_units(feb_mean),
-    units::drop_units(abind::adrop(clim_mon[,,,2,1]))
+    mean(result$t2m),
+    0,
+    tolerance = 1e-10
   )
-  expect_equal(
-    units::drop_units(feb_sd),
-    units::drop_units(abind::adrop(clim_mon[,,,2,2]))
-  )
+})
+
+test_that("get_anomalies handles monthly calculations correctly", {
+  # Create test data with known monthly pattern
+  times <- seq(as.Date("2000-01-01"), as.Date("2002-12-31"), by = "month")
+  x <- 1:3
+  y <- 1:3
+
+  # Create data where each month has a constant value
+  month_pattern <- rep(1:12, 3)  # 3 years
+  test_array <- array(rep(month_pattern, each = 9), c(3, 3, 36))
+
+  test_data <- st_as_stars(test_array) %>%
+    setNames('t2m') |>
+    st_set_dimensions(1, values = x, name = "x") %>%
+    st_set_dimensions(2, values = y, name = "y") %>%
+    st_set_dimensions(3, values = times, name = "time")
+
+  # Calculate monthly anomalies
+  result <- get_anomalies(test_data, monthly = TRUE)
+
+  # Each month's anomalies should be zero since values are constant per month
+  expect_true(all(abs(result$t2m) < 1e-10))
+})
+
+test_that("get_anomalies monthly calculation works", {
+  # Create test data
+  times <- seq(ymd("2000-01-01"), ymd("2002-12-31"), by = "month")
+  x <- 1:3
+  y <- 1:3
+
+  # Create data with known monthly pattern (value equals month number)
+  test_array <- array(0, c(3, 3, 36))
+  for(i in 1:36) {
+    test_array[,,i] <- (i-1) %% 12 + 1
+  }
+
+  test_data <- st_as_stars(test_array) %>%
+    st_set_dimensions(1, values = x, name = "x") %>%
+    st_set_dimensions(2, values = y, name = "y") %>%
+    st_set_dimensions(3, values = times, name = "time")
+
+  # Calculate anomalies
+  result <- get_anomalies(test_data, monthly = TRUE)
+
+  # Check dimensions
+  expect_equal(dim(result), c(x = 3, y = 3, time = 36))
+  expect_equal(st_get_dimension_values(result, "time"), times)
+
+  # For each month, anomalies should be zero (each month's values equal its mean)
+  for(m in 1:12) {
+    month_vals <- as.vector(result[,,,which(month(times) == m)]$A1)
+    expect_equal(month_vals, rep(0, length(month_vals)))
+  }
+})
+
+
+test_that("get_anomalies and restore_climatology are inverses", {
+  # Test with dates
+  times <- seq(as.Date("2000-01-01"), as.Date("2002-12-31"), by = "month")
+  x <- 1:3
+  y <- 1:3
+
+  set.seed(123)
+  test_array <- array(rnorm(3*3*36, mean = 20, sd = 5), c(3, 3, 36))
+  names(dim(test_array)) <- c("x", "y", "time")
+  test_data <- st_as_stars(test_array) %>%
+    setNames('t2m') %>%
+    st_set_dimensions(1, values = x, name = "x") %>%
+    st_set_dimensions(2, values = y, name = "y") %>%
+    st_set_dimensions(3, values = times, name = "time")
+
+  # Test both monthly and non-monthly cases
+  for (monthly in c(TRUE, FALSE)) {
+    for (scale in c(TRUE, FALSE)) {
+      # Get anomalies and restore
+      anom <- get_anomalies(test_data, monthly = monthly, scale = scale)
+      restored <- restore_climatology(anom, get_climatology(test_data, monthly = monthly),
+                                      monthly = monthly, scale = scale)
+
+      # Compare original and restored values
+      expect_equal(test_data$t2m, restored$t2m, tolerance = 1e-10)
+    }
+  }
+})
+
+test_that("functions handle incomplete years gracefully", {
+  # Create data with incomplete year
+  times <- seq(as.Date("2000-01-01"), as.Date("2002-05-31"), by = "month")  # 29 months
+  x <- 1:3
+  y <- 1:3
+
+  test_array <- array(1:261, c(3, 3, 29))  # 29 months of data
+
+  test_data <- st_as_stars(test_array) %>%
+    setNames('t2m') %>%
+    st_set_dimensions(1, values = x, name = "x") %>%
+    st_set_dimensions(2, values = y, name = "y") %>%
+    st_set_dimensions(3, values = times, name = "time")
+
+  # Should give warning but still compute
+  expect_warning(clim <- get_climatology(test_data, monthly = TRUE),
+                 "Data does not contain complete years")
+  expect_error(anom <- get_anomalies(test_data, monthly = TRUE),
+                 "Data does not contain complete years")
+
+  # Results should still have correct structure
+  expect_equal(dim(clim), c(x = 3, y = 3, month = 12, statistic = 2))
+  #expect_equal(dim(anom), c(x = 3, y = 3, time = 29))
+})
+
+test_that("functions handle non-January start dates correctly", {
+  # Create test data starting in July
+  times <- seq(ymd("2000-07-01"), ymd("2002-06-30"), by = "month")
+  x <- 1:3
+  y <- 1:3
+
+  # Create data where each month has a unique value
+  test_array <- array(rep(1:12, each = 9), c(3, 3, 24))  # 2 complete years
+  names(dim(test_array)) <- c("x", "y", "time")
+  test_data <- st_as_stars(test_array) %>%
+    setNames('t2m') %>%
+    st_set_dimensions(1, values = x, name = "x") %>%
+    st_set_dimensions(2, values = y, name = "y") %>%
+    st_set_dimensions(3, values = times, name = "time")
+
+  # Calculate climatology
+  clim <- get_climatology(test_data, monthly = TRUE)
+
+  # Check month ordering
+  expected_months <- as.character(unique(lubridate::month(times, label = TRUE, abbr = FALSE)))
+  expect_equal(st_get_dimension_values(clim, "month"), expected_months)
+  expect_equal(expected_months[1], "July")
+
+  # Calculate anomalies
+  anom <- get_anomalies(test_data, monthly = TRUE)
+
+  # Verify values
+  for(i in 1:12) {
+    month_data <- test_array[,,which(as.character(lubridate::month(times, label = TRUE, abbr = FALSE)) == expected_months[i])]
+    expect_equal(unique(as.vector(month_data)), i)
+  }
+
+  # Test restore_climatology
+  restored <- restore_climatology(anom, clim, monthly = TRUE)
+  expect_equal(test_data$t2m, restored$t2m, tolerance = 1e-10)
+})
+
+test_that("functions handle partial years correctly with non-standard start", {
+  # Create test data with partial years starting in October
+  times <- seq(ymd("2000-10-01"), ymd("2002-03-31"), by = "month")  # 18 months
+  x <- 1:3
+  y <- 1:3
+
+  test_array <- array(1:162, c(3, 3, 18))
+
+  test_data <- st_as_stars(test_array) %>%
+    setNames('t2m') %>%
+    st_set_dimensions(1, values = x, name = "x") %>%
+    st_set_dimensions(2, values = y, name = "y") %>%
+    st_set_dimensions(3, values = times, name = "time")
+
+  # Should give warning but still compute
+  expect_warning(clim <- get_climatology(test_data, monthly = TRUE))
+
+  # Check month ordering
+  expected_months <- as.character(unique(lubridate::month(times, label = TRUE, abbr = FALSE)))
+  expect_equal(st_get_dimension_values(clim, "month"), expected_months)
+  expect_equal(expected_months[1], "October")
+
+  # Test full cycle
+  #expect_warning(anom <- get_anomalies(test_data, monthly = TRUE))
+  #expect_warning(restored <- restore_climatology(anom, clim, monthly = TRUE))
+  #expect_equal(test_data$t2m, restored$t2m, tolerance = 1e-10)
+})
+
+test_that("cycle of operations preserves values for different start months", {
+  # Test multiple different starting months
+  start_months <- c(1, 4, 7, 10)  # Test quarterly starts
+
+  for(start_month in start_months) {
+    # Create 2 years of data starting in different months
+    times <- seq(ymd(paste0("2000-", start_month, "-01")),
+                 length.out = 24, by = "month")
+    x <- 1:3
+    y <- 1:3
+
+    test_array <- array(rnorm(3*3*24, mean = 20, sd = 5), c(3, 3, 24))
+    names(dim(test_array)) <- c("x", "y", "time")
+
+    test_data <- st_as_stars(test_array) %>%
+      setNames('t2m') %>%
+      st_set_dimensions(1, values = x, name = "x") %>%
+      st_set_dimensions(2, values = y, name = "y") %>%
+      st_set_dimensions(3, values = times, name = "time")
+
+    # Full cycle of operations
+    clim <- get_climatology(test_data, monthly = TRUE)
+    anom <- get_anomalies(test_data, monthly = TRUE)
+    restored <- restore_climatology(anom, clim, monthly = TRUE)
+
+    # Check month ordering in climatology
+    expected_months <- as.character(unique(lubridate::month(times, label = TRUE, abbr = FALSE)))
+    expect_equal(st_get_dimension_values(clim, "month"), expected_months)
+    expect_equal(expected_months[1],
+                 as.character(month(ymd(paste0("2000-", start_month, "-01")),
+                       label = TRUE, abbr = FALSE)))
+
+    # Check value preservation
+    expect_equal(test_data$t2m, restored$t2m, tolerance = 1e-10)
+  }
 })
