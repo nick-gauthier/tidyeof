@@ -52,7 +52,7 @@ get_eofs <- function(dat, k, rotate = FALSE) {
   orig_dims <- st_dimensions(dat)
   orig_crs <- st_crs(dat)
   times <- st_get_dimension_values(dat, "time")
-  dims <- dim(anom)
+  dims <- dim(dat)
   n_pixels <- dims[[1]] * dims[[2]]
 
   pc_names <- names0(k, 'PC')
@@ -97,14 +97,12 @@ get_eofs <- function(dat, k, rotate = FALSE) {
     aperm(c(2, 3, 1))
 
   # Calculate amplitudes
-  amplitudes <- if (rotate && k > 1) {
-    pca_result$x[, 1:k] %*% rotation_matrix # do these need to be reordered in the case of reofs or is it preserved by new rotation matrix?
-  } else {
-    pca_result$x[, 1:k]
-  } %>%
-    sweep(2, pca_result$sdev[1:k], "/") %>% # does this happen before or after rotation?
+  amplitudes <- pca_result$x[, 1:k]
+  if (rotate && k > 1) amplitudes <- amplitudes %*% rotation_matrix # do these need to be reordered in the case of reofs or is it preserved by new rotation matrix?
+  colnames(amplitudes) <- pc_names
+  amplitudes <- amplitudes %>%
+    sweep(2, pca_result$sdev[1:k], "/") %>% # does this happen before or after rotation? is this doing anything?
     as_tibble() %>%
-    setNames(pc_names) %>%
     mutate(time = times, .before = 1)
 
   # Calculate eigenvalues
@@ -123,9 +121,9 @@ get_eofs <- function(dat, k, rotate = FALSE) {
     spatial_patterns = spatial_patterns,
     amplitudes = amplitudes,
     pca = pca_result,
-    eigenvalues = eigenvalues
-    #rotation_matrix = rotation_matrix,
-    #valid_pixels = valid_pixels
+    eigenvalues = eigenvalues,
+    rotation_matrix = rotation_matrix,
+    valid_pixels = valid_pixels
   )
 }
 
@@ -137,13 +135,6 @@ lat_weights <- function(dat) {
   sqrt(cos(lats * pi / 180))
 }
 
-#' @export
-print.patterns <- function(obj) {
-  print(paste0('A `pattern` object with k = ', obj$k, ', scale = ', obj$scale,
-               ', monthly = ', obj$monthly, ', and rotate = ', obj$rotate))
-  print(obj$eofs)
-}
-
 # from tidymodels/recipes
 names0 <- function(num, prefix = "PC") {
   if (num < 1) {
@@ -152,4 +143,130 @@ names0 <- function(num, prefix = "PC") {
   ind <- format(seq_len(num))
   ind <- gsub(" ", "0", ind)
   paste0(prefix, ind)
+}
+
+#' Print method for patterns objects
+#'
+#' @param x A patterns object
+#' @param ... Additional arguments passed to print
+#' @export
+print.patterns <- function(x, ...) {
+  cat(sprintf("A patterns object with %d modes\n", x$k))
+  cat(sprintf("  Processing options:\n"))
+  cat(sprintf("    - Scale: %s\n", x$scaled))
+  cat(sprintf("    - Monthly: %s\n", x$monthly))
+  cat(sprintf("    - Rotated: %s\n", x$rotate))
+  cat(sprintf("    - Latitude weighted: %s\n", x$weight))
+
+  cat("\nEigenvalues:\n")
+  top_eigs <- head(x$eigenvalues, x$k)
+  print(round(top_eigs$eigenvalues / sum(x$eigenvalues$eigenvalues) * 100, 1))
+
+  invisible(x)
+}
+
+#' Summary method for patterns objects
+#'
+#' @param object A patterns object
+#' @param ... Additional arguments passed to summary
+#' @export
+summary.patterns <- function(object, ...) {
+  # Calculate total variance explained by retained PCs
+  var_explained <- sum(head(object$eigenvalues$eigenvalues, object$k)) /
+    sum(object$eigenvalues$eigenvalues) * 100
+
+  # Get pattern correlations if rotated
+  pattern_cors <- if(object$rotate && object$k > 1) {
+    cors <- cor(object$amplitudes[,-1])  # exclude time column
+    round(cors[upper.tri(cors)], 3)
+  } else {
+    NULL
+  }
+
+  # Create summary object
+  structure(
+    list(
+      k = object$k,
+      n_times = nrow(object$amplitudes),
+      var_explained = var_explained,
+      pattern_cors = pattern_cors,
+      scaled = object$scaled,
+      monthly = object$monthly,
+      rotate = object$rotate,
+      weight = object$weight,
+      units = object$units
+    ),
+    class = "summary.patterns"
+  )
+}
+
+#' Print method for summary.patterns objects
+#'
+#' @param x A summary.patterns object
+#' @param ... Additional arguments passed to print
+#' @export
+print.summary.patterns <- function(x, ...) {
+  cat("Summary of patterns object:\n\n")
+  cat(sprintf("Number of modes: %d\n", x$k))
+  cat(sprintf("Time steps: %d\n", x$n_times))
+  cat(sprintf("Total variance explained: %.1f%%\n", x$var_explained))
+
+  if(!is.null(x$pattern_cors)) {
+    cat("\nPattern correlations:\n")
+    print(x$pattern_cors)
+  }
+
+  cat("\nProcessing options:\n")
+  cat(sprintf("  Scale: %s\n", x$scaled))
+  cat(sprintf("  Monthly: %s\n", x$monthly))
+  cat(sprintf("  Rotated: %s\n", x$rotate))
+  cat(sprintf("  Latitude weighted: %s\n", x$weight))
+
+  invisible(x)
+}
+
+#' Plot method for patterns objects
+#'
+#' @param x A patterns object
+#' @param type Character string indicating type of plot ("eofs", "amplitudes", or "scree")
+#' @param ... Additional arguments passed to plotting functions
+#' @export
+plot.patterns <- function(x, type = "eofs", ...) {
+  switch(
+    type,
+    "eofs" = plot_eofs(x, ...),
+    "amplitudes" = plot_amps(x, ...),
+    "scree" = plot_scree(x$eigenvalues, k = x$k, ...),
+    stop("Invalid plot type. Must be one of 'eofs', 'amplitudes', or 'scree'")
+  )
+}
+
+#' Format patterns as a data frame
+#'
+#' @param x A patterns object
+#' @param ... Additional arguments
+#' @export
+as.data.frame.patterns <- function(x, ...) {
+  # Convert EOF spatial patterns to long format
+  eofs_df <- x$eofs %>%
+    as_tibble() %>%
+    tidyr::pivot_longer(
+      -c(x, y),
+      names_to = "PC",
+      values_to = "weight"
+    )
+
+  # Convert amplitudes to long format
+  amps_df <- x$amplitudes %>%
+    tidyr::pivot_longer(
+      -time,
+      names_to = "PC",
+      values_to = "amplitude"
+    )
+
+  list(
+    eofs = eofs_df,
+    amplitudes = amps_df,
+    eigenvalues = x$eigenvalues
+  )
 }
