@@ -129,9 +129,6 @@ get_anomalies <- function(dat, clim = NULL, scale = FALSE, monthly = FALSE) {
         st_set_dimensions('time', values = times)
     }
 
-  # Restore units
-  out <- restore_units(out, dat)
-
   return(out)
 }
 
