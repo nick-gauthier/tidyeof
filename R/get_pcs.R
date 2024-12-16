@@ -1,25 +1,33 @@
-
-#' Calculate principal components
+#' Calculate principal components from spatiotemporal data
 #'
-#' @param dat
-#' @param scale
+#' @param dat A stars object containing spatiotemporal data
+#' @param scale Logical, whether to scale the data before computing anomalies
+#' @param clim Optional climatology object from get_climatology()
+#' @param monthly Logical, whether to use monthly climatology
 #'
-#' @return
+#' @return A prcomp object containing the PCA results
 #' @export
-#'
-#' @examples
+get_pcs <- function(dat, scale = FALSE, clim = NULL, monthly = FALSE, weight = TRUE) {
+  # weight by sqrt cosine latitude, in radians
+  if(weight) dat <- dat * lat_weights(dat)
 
-get_pcs <- function(dat, scale = FALSE, clim = NULL, monthly = FALSE) {
+  # Get anomalies (centers and optionally scales the data)
+  anomalies <- get_anomalies(dat,
+                             clim = clim,
+                             scale = scale,
+                             monthly = monthly)
 
-  dat %>%
-    get_anomalies(clim = clim, scale = scale, monthly = monthly) %>%
+  # Convert to matrix format for PCA
+  data_matrix <- anomalies %>%
     split('time') %>% # split along the time dimension
     setNames(st_get_dimension_values(dat, 'time')) %>%
     as_tibble() %>%
     dplyr::select(-c(x,y)) %>%
     na.omit() %>%
-    t() %>% # transpose to space is columns and time rows
-    prcomp(center = FALSE)
+    t() # transpose to space-as-columns format
+
+  # Perform PCA without additional centering since data are anomalies
+  prcomp(data_matrix, center = FALSE)
 }
 
 #' @export
