@@ -9,19 +9,28 @@
 flip_patterns <- function(patterns) {
   # this function tries to make sure all the patterns have roughly the same major sign, which makes plotting easier
   # alternatively could try to align to original time series variable as well
-  sums <- split(patterns$eofs) %>%
-    as_tibble() %>%
-    dplyr::summarise(across(starts_with('PC'), ~sign(sum(.x, na.rm = TRUE)))) %>%
-    unlist()
 
-    patterns$eofs <-  sweep(patterns$eofs, MARGIN = 3, STATS = sums, FUN = "*")
+  if (has_geometry_dimension(patterns$eofs)) {
+    # For sf geometry, compute sums directly from the array
+    eof_data <- patterns$eofs[[1]]  # Get the data array
+    sums <- apply(eof_data, 2, function(x) sign(sum(x, na.rm = TRUE)))
+    names(sums) <- paste0("PC", seq_along(sums))
+  } else {
+    # Original logic for raster data
+    sums <- split(patterns$eofs) %>%
+      as_tibble() %>%
+      dplyr::summarise(across(starts_with('PC'), ~sign(sum(.x, na.rm = TRUE)))) %>%
+      unlist()
+  }
 
-    patterns$amplitudes <- patterns$amplitudes %>%
-      select(-time) %>%
-      sweep(MARGIN = 2, STATS = sums, FUN = '*') %>%
-      bind_cols(time = patterns$amplitudes$time, .)
+  patterns$eofs <- sweep(patterns$eofs, MARGIN = length(dim(patterns$eofs)), STATS = sums, FUN = "*")
 
-    return(patterns)
+  patterns$amplitudes <- patterns$amplitudes %>%
+    select(-time) %>%
+    sweep(MARGIN = 2, STATS = sums, FUN = '*') %>%
+    bind_cols(time = patterns$amplitudes$time, .)
+
+  return(patterns)
 }
 
 # congruence <- function(x, y) {
