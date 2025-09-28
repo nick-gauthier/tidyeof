@@ -24,7 +24,7 @@ get_correlation <- function(dat, patterns, amplitudes = NULL) {
 
   suppressWarnings( # suppress warnings that sd is zero
   filter(dat, time %in% times_cor) %>%
-  st_apply(c('x', 'y'), function(x) cor(x, amps), .fname = 'PC') %>%
+  st_apply(get_spatial_dimensions(.), function(x) cor(x, amps), .fname = 'PC') %>%
     st_set_dimensions(., 'PC', values = paste0('PC', st_get_dimension_values(., 'PC'))) %>%
     aperm(c(2,3,1))
   )
@@ -46,7 +46,7 @@ get_fdr <- function(dat, patterns, fdr = 0.1, amplitudes = NULL) {
 
   suppressWarnings( # suppress warnings that sd is zero
     fdr_rast <- filter(dat, time %in% times_cor) %>%
-      st_apply(c('x', 'y'), fdr_fun, amps = amps, .fname = 'PC') %>%
+      st_apply(get_spatial_dimensions(.), fdr_fun, amps = amps, .fname = 'PC') %>%
       aperm(c(2,3,1)) %>%
       st_apply('PC', adjust) %>%
       setNames('FDR')
