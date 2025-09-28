@@ -42,7 +42,7 @@ predict_cca <- function(preds, obs, newdata, k) { # is weight used anywhere?
 project_patterns <- function(patterns, newdata) {
   new_times <- st_get_dimension_values(newdata, 'time')
 
-  if(patterns$weight) newdata <- newdata * lat_weights(newdata) # weight by sqrt cosine latitude, in radians
+  if(patterns$weight) newdata <- newdata * area_weights(newdata) # weight by sqrt normalized area
 
   newdata %>%
     get_anomalies(patterns$climatology, scale = patterns$scaled, monthly = patterns$monthly) %>%
@@ -54,7 +54,7 @@ project_patterns <- function(patterns, newdata) {
     na.omit() %>%
     t() %>%
     predict(patterns$pca, .) %>%
-    scale(center = FALSE, scale = patterns$pca$sdev) %>% # this should be from the training pcs
+    # Note: predict() already returns properly scaled scores, don't scale again
     .[,1:patterns$k, drop = FALSE] %>%
     {if(is.matrix(patterns$rotation)) . %*% patterns$rotation else .} %>%
     as_tibble() %>%
@@ -94,7 +94,7 @@ predict_gam <- function(preds, obs, newdata, k) {
     na.omit() %>%
     t() %>%
     predict(preds$pca, .) %>%
-    scale(center = FALSE, scale = preds$pca$sdev) %>% # this should be from the training pcs
+    # Note: predict() already returns properly scaled scores, don't scale again
     .[,1:k_preds, drop = FALSE] %>%
     as_tibble(rownames = 'time')
 
@@ -132,7 +132,7 @@ predict_pcr <- function(preds, obs, newdata, k) {
     na.omit() %>%
     t() %>%
     predict(preds$pca, .) %>%
-    scale(center = FALSE, scale = preds$pca$sdev) %>% # this should be from the training pcs
+    # Note: predict() already returns properly scaled scores, don't scale again
     .[,1:k_preds, drop = FALSE] %>%
     as_tibble(rownames = 'time')
 
