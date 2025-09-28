@@ -34,7 +34,7 @@
 get_climatology <- function(dat, monthly = FALSE) {
   # Basic validation
   if (!inherits(dat, "stars")) {
-    stop("Input must be a stars object")
+    rlang::abort("Input must be a stars object", class = "tidyEOF_invalid_input")
   }
 
   if (monthly) {
@@ -55,8 +55,9 @@ get_climatology <- function(dat, monthly = FALSE) {
       st_set_dimensions('geometry', names = 'month')
   } else {
     # Annual climatology calculation
-    mean_result <- st_apply(dat, 1:2, mean, na.rm = TRUE, rename = FALSE)
-    sd_result <- st_apply(dat, 1:2, sd, na.rm = TRUE, rename = FALSE)
+    spatial_dims <- get_spatial_dimensions(dat)
+    mean_result <- st_apply(dat, spatial_dims, mean, na.rm = TRUE, rename = FALSE)
+    sd_result <- st_apply(dat, spatial_dims, sd, na.rm = TRUE, rename = FALSE)
   }
 
   # Combine and restore units
@@ -77,14 +78,14 @@ get_climatology <- function(dat, monthly = FALSE) {
 get_anomalies <- function(dat, clim = NULL, scale = FALSE, monthly = FALSE) {
   # Basic validation
   if (!inherits(dat, "stars")) {
-    stop("Input must be a stars object")
+    rlang::abort("Input must be a stars object", class = "tidyEOF_invalid_input")
   }
 
   # Get or validate climatology
   if (is.null(clim)) {
     clim <- get_climatology(dat, monthly = monthly)
   } else if (!inherits(clim, "stars")) {
-    stop("climatology must be a stars object")
+    rlang::abort("climatology must be a stars object", class = "tidyEOF_invalid_input")
   }
 
   # Extract statistics
@@ -99,7 +100,7 @@ get_anomalies <- function(dat, clim = NULL, scale = FALSE, monthly = FALSE) {
     n_times <- length(times)
 
     if (n_times %% 12 != 0) {
-      stop("Data does not contain complete years")
+      rlang::abort("Data does not contain complete years. Need 12-month intervals for monthly climatology.", class = "tidyEOF_invalid_time")
     }
 
     # Get the actual months in the data
@@ -137,15 +138,25 @@ get_anomalies <- function(dat, clim = NULL, scale = FALSE, monthly = FALSE) {
 restore_climatology <- function(anomalies, clim, scale = FALSE, monthly = FALSE) {
   # Basic validation
   if (!inherits(anomalies, "stars")) {
-    stop("Anomalies must be a stars object")
+    rlang::abort("Anomalies must be a stars object", class = "tidyEOF_invalid_input")
   }
   if (!inherits(clim, "stars")) {
-    stop("Climatology must be a stars object")
+    rlang::abort("Climatology must be a stars object", class = "tidyEOF_invalid_input")
   }
 
-  # Extract statistics and drop units
-  target_mean <- slice(clim, 'statistic', 1)# |> units::drop_units()
-  target_sd <- slice(clim, 'statistic', 2)# |> units::drop_units()
+  # Extract statistics and handle units properly
+  target_mean <- slice(clim, 'statistic', 1)
+  target_sd <- slice(clim, 'statistic', 2)
+
+  # Check if anomalies and climatology have matching units
+  anomalies_has_units <- any(sapply(names(anomalies), function(var) !is.null(tryCatch(units(anomalies[[var]]), error = function(e) NULL))))
+  clim_has_units <- any(sapply(names(target_mean), function(var) !is.null(tryCatch(units(target_mean[[var]]), error = function(e) NULL))))
+
+  # If units mismatch, drop units from climatology to match anomalies
+  if(!anomalies_has_units && clim_has_units) {
+    target_mean <- units::drop_units(target_mean)
+    target_sd <- units::drop_units(target_sd)
+  }
 
   if (monthly) {
     # Get time values and dimensions
@@ -211,11 +222,11 @@ restore_units <- function(new, ref) {
 #' Print method for climatology objects
 #' @export
 print.climatology <- function(x, ...) {
-  cat("Climatology object\n")
-  cat("Dimensions:", paste(names(st_dimensions(x)), collapse=", "), "\n")
+  cli::cli_h1("Climatology Object")
+  cli::cli_text("Dimensions: {.field {glue_collapse(names(st_dimensions(x)), sep = ', ')}}")
   if ("month" %in% names(st_dimensions(x))) {
-    cat("Type: Monthly\n")
+    cli::cli_text("Type: {.field Monthly}")
   } else {
-    cat("Type: Annual\n")
+    cli::cli_text("Type: {.field Annual}")
   }
 }
