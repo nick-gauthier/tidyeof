@@ -2,13 +2,27 @@
 % Please edit documentation in R/plot_patterns.R
 \name{plot_eofs}
 \alias{plot_eofs}
-\title{Plotting functions for patterns objects}
+\title{Plot EOF spatial patterns (deprecated)}
 \usage{
 plot_eofs(patterns, scaled = FALSE, rawdata = NULL)
 }
 \arguments{
-\item{normalized}{}
+\item{patterns}{A patterns object}
+
+\item{scaled}{Logical, whether to show correlations (TRUE) or raw loadings (FALSE)}
+
+\item{rawdata}{Optional raw data for correlation calculation when scaled = TRUE}
+}
+\value{
+A ggplot object
 }
 \description{
-Plotting functions for patterns objects
+Plot EOF spatial patterns (deprecated)
+}
+\details{
+\strong{This function is deprecated.} Use \code{plot(patterns)} or
+\code{plot(patterns, type = "eofs")} instead.
+}
+\seealso{
+\code{\link{plot.patterns}} for the recommended plotting interface
 }

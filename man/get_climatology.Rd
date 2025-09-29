@@ -2,25 +2,42 @@
 % Please edit documentation in R/get_climatology.R
 \name{get_climatology}
 \alias{get_climatology}
-\title{Get annual or monthly means and standard deviations, or rescale a grid using climatology}
+\title{Calculate climatological mean and standard deviation for spatial data}
 \usage{
 get_climatology(dat, monthly = FALSE)
 }
 \arguments{
-\item{dat}{Input data.}
+\item{dat}{A stars object containing a spatial field with dimensions (x, y, time)}
 
-\item{monthly}{Calculate monthly climatology or anomalies instead of using
-the entire period? Defaults to FALSE.}
-
-\item{clim}{An optional climatology made with get_climatology().
-Defaults to NULL, in which case get_climatology() is called internally.}
-
-\item{scale}{Calculate standardized anomalies (x - mean) / sd? Defaults to
-FALSE.
-
-Based on the `climatology()` and `scaleGrid()` functions from transformeR.
-These functions apply calculations per grid cell.}
+\item{monthly}{Logical. If TRUE, computes monthly climatology. If FALSE (default),
+computes statistics over the entire period.}
+}
+\value{
+A stars object with:
+  - Original spatial dimensions (x, y)
+  - For monthly climatology: Additional month dimension with values from month.name
+  - Additional statistic dimension containing 'mean' and 'sd' statistics
+  - Original units preserved from input data
 }
 \description{
-Get annual or monthly means and standard deviations, or rescale a grid using climatology
+Computes climatological statistics (mean and standard deviation) for a spatial field,
+either annually or monthly. Preserves spatial dimensions and units from the input data.
+}
+\examples{
+# Create sample data
+library(stars)
+times <- seq(as.Date("2000-01-01"), as.Date("2002-12-31"), by = "month")
+x <- seq(0, 1, length.out = 10)
+y <- seq(0, 1, length.out = 10)
+dat <- stars::st_as_stars(array(rnorm(10*10*36), c(10, 10, 36))) \%>\%
+  st_set_dimensions(1, values = x, name = "x") \%>\%
+  st_set_dimensions(2, values = y, name = "y") \%>\%
+  st_set_dimensions(3, values = times, name = "time")
+
+# Calculate annual climatology
+clim <- get_climatology(dat)
+
+# Calculate monthly climatology
+monthly_clim <- get_climatology(dat, monthly = TRUE)
+
 }

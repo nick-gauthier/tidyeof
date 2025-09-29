@@ -2,13 +2,53 @@
 % Please edit documentation in R/couple_patterns.R
 \name{couple_patterns}
 \alias{couple_patterns}
-\title{Title}
+\title{Couple Pattern Relationships Using CCA}
 \usage{
-couple_patterns(patterns.x, patterns.y)
+couple_patterns(
+  predictor_patterns,
+  response_patterns,
+  k = NULL,
+  method = "cca",
+  center = FALSE,
+  validate = TRUE
+)
 }
 \arguments{
-\item{patterns.y}{}
+\item{predictor_patterns}{A patterns object containing predictor patterns (e.g., from get_patterns())}
+
+\item{response_patterns}{A patterns object containing response patterns (e.g., from get_patterns())}
+
+\item{k}{Number of CCA modes to retain. If NULL, uses min(ncol(predictor), ncol(response))}
+
+\item{method}{Coupling method. Currently only "cca" is supported in the refactored version}
+
+\item{center}{Logical, whether to center the data before CCA (default: FALSE)}
+
+\item{validate}{Logical, whether to validate input patterns compatibility}
+}
+\value{
+A coupled_patterns object containing:
+  \item{cca}{The CCA results from cancor()}
+  \item{predictor_patterns}{The original predictor patterns}
+  \item{response_patterns}{The original response patterns}
+  \item{k}{Number of CCA modes retained}
+  \item{method}{Coupling method used}
 }
 \description{
-Title
+This function couples predictor and response patterns using Canonical Correlation Analysis (CCA)
+as the primary method. CCA finds linear combinations of predictor and response patterns that
+maximize correlation between them.
+}
+\examples{
+\dontrun{
+# Get patterns from your data
+pred_patterns <- get_patterns(predictor_data, k = 5)
+resp_patterns <- get_patterns(response_data, k = 5)
+
+# Couple the patterns
+coupled <- couple_patterns(pred_patterns, resp_patterns, k = 3)
+
+# Make predictions
+predictions <- predict(coupled, new_predictor_data)
+}
 }

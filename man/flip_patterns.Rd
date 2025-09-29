@@ -2,7 +2,7 @@
 % Please edit documentation in R/align_patterns.R
 \name{flip_patterns}
 \alias{flip_patterns}
-\title{Title}
+\title{Domain alignment for climate patterns}
 \usage{
 flip_patterns(patterns)
 }
@@ -10,5 +10,5 @@ flip_patterns(patterns)
 \item{patterns}{}
 }
 \description{
-Title
+Domain alignment for climate patterns
 }
