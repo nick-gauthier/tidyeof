@@ -65,10 +65,10 @@ screeplot.patterns <- function(x, k = NULL, kmax = 10, ...) {
     dplyr::mutate(separated = if_else(is.na(lag(low)), TRUE, hi < lag(low)),
            multiplet = as.factor(cumsum(separated))) %>%
     filter(PC <= kmax) %>%
-    ggplot2::ggplot(aes(x = PC, y = percent * 100)) +
+    ggplot2::ggplot(aes(x = PC, y = percent)) +
     ggplot2::geom_linerange(aes(x = PC, ymin = low, ymax = hi)) +
     ggplot2::geom_point(size = 2, aes(color = multiplet)) +
-    ggplot2::geom_text(aes(x = PC, y = cumvar_line, label = glue::glue("{round(cumulative * 100, 0)}%")), size = 2.5, vjust = 0) +
+    ggplot2::geom_text(aes(x = PC, y = cumvar_line, label = glue::glue("{round(cumulative, 0)}%")), size = 2.5, vjust = 0) +
     ggplot2::labs(x = "Principal Component", y = "Normalized Eigenvalue") +
     ggplot2::geom_vline(xintercept = k + .5, linetype = 2, color = 'red', alpha = .7) +
     ggplot2::theme_bw() +
@@ -176,4 +176,172 @@ print_significance <- function(signif_obj) {
   for(i in seq_along(is_distinct)) {
     cat(glue("EOF {i}: {ifelse(is_distinct[i], 'Distinct', 'May be degenerate')} (±{sampling_errors[i]:.3f})\\n"))
   }
+}
+#' Plot method for patterns objects
+#'
+#' @param x A patterns object
+#' @param type Type of plot: "combined" (default), "eofs", or "amplitudes"
+#' @param scaled For EOFs: show correlations (TRUE) or raw loadings (FALSE)
+#' @param rawdata Optional raw data for correlation calculation when scaled = TRUE
+#' @param scale For amplitudes: scaling method ("standardized", "variance", "raw")
+#' @param scale_y For amplitudes: y-axis scaling ("fixed" or "free")
+#' @param events For amplitudes: optional dates to mark with vertical lines
+#' @param ... Additional arguments (currently unused)
+#' @return A ggplot2 object or patchwork object for combined plots
+#' @export
+plot.patterns <- function(x,
+                          type = "combined",
+                          scaled = FALSE,
+                          rawdata = NULL,
+                          scale = c("standardized", "variance", "raw"),
+                          scale_y = c("fixed", "free"),
+                          events = NULL,
+                          ...) {
+
+  type <- match.arg(type, c("combined", "eofs", "amplitudes"))
+  scale <- match.arg(scale)
+  scale_y <- match.arg(scale_y)
+
+  if(type == "combined") {
+    # Smart combined plot: EOFs above, PCs below with KISS layout logic
+    if(!requireNamespace("patchwork", quietly = TRUE)) {
+      warning("patchwork package needed for combined plots. Install with: install.packages('patchwork')\nShowing EOFs only.")
+      return(.plot_eofs_internal(x, scaled = scaled, rawdata = rawdata))
+    } else {
+      # Simple smart layout - covers 80% of use cases perfectly
+      layout <- .simple_smart_layout(x$k)
+
+      # Create EOF plot with smart layout
+      p_eofs <- .plot_eofs_internal(x, scaled = scaled, rawdata = rawdata, layout = layout$eof)
+
+      # Create amplitude plot with matching layout
+      p_amps <- .plot_amplitudes_internal(x, scale = scale, scale_y = scale_y, events = events, layout = layout$pc)
+
+      # Combine with patchwork using top-over-bottom layout and alignment tricks
+      return(p_eofs /
+             p_amps +
+             patchwork::plot_layout(
+               heights = layout$heights,
+               guides = "collect",
+               axis_titles = "collect"
+             ) +
+             patchwork::plot_annotation(
+               title = glue::glue("EOF Analysis: {glue::glue_collapse(x$names, sep = ', ')}"),
+               subtitle = glue::glue("k = {x$k} modes | {ifelse(x$scaled, 'scaled', 'unscaled')} | {ifelse(x$rotate, 'rotated', 'unrotated')}")
+             ) &
+             ggplot2::theme(plot.margin = ggplot2::margin(5, 5, 5, 5)))
+    }
+  } else if(type == "eofs") {
+    return(.plot_eofs_internal(x, scaled = scaled, rawdata = rawdata))
+  } else if(type == "amplitudes") {
+    return(.plot_amplitudes_internal(x, scale = scale, scale_y = scale_y, events = events))
+  }
+}
+
+#' Simple smart layout function - KISS principle
+#' @keywords internal
+.simple_smart_layout <- function(k) {
+  if(k <= 3) {
+    # Single row: works for most cases, clean alignment
+    list(eof = list(nrow = 1), pc = list(nrow = 1), heights = c(5, 1))
+  } else {
+    # k >= 4: Use square-ish grid
+    ncol <- ceiling(sqrt(k))
+    list(eof = list(ncol = ncol), pc = list(ncol = ncol), heights = c(5, 1))
+  }
+}
+
+#' Internal function for EOF plotting
+#' @keywords internal
+.plot_eofs_internal <- function(x, scaled = FALSE, rawdata = NULL, layout = NULL) {
+  # Use provided layout or default to old behavior
+  if(is.null(layout)) {
+    facet_args <- list(nrow = 1)
+  } else {
+    facet_args <- layout
+  }
+
+  if(scaled) {
+    if(is.null(rawdata)) {
+      rlang::abort("rawdata must be provided when scaled = TRUE for correlation calculation", class = "tidyEOF_missing_rawdata")
+    }
+    ggplot2::ggplot() +
+      stars::geom_stars(data = get_correlation(rawdata, x)) +
+      do.call(ggplot2::facet_wrap, c(list(~PC), facet_args)) +
+      ggplot2::scale_fill_distiller(palette = 'RdBu', na.value = NA, limits = c(-1, 1)) +
+      ggplot2::coord_sf() +
+      ggplot2::theme_void() +
+      ggplot2::theme(legend.position = "right") +
+      ggplot2::labs(fill = "Correlation")
+  } else {
+    ggplot2::ggplot() +
+      stars::geom_stars(data = x$eofs) +
+      do.call(ggplot2::facet_wrap, c(list(~PC), facet_args)) +
+      scico::scale_fill_scico(palette = 'vik', midpoint = 0, na.value = NA) +
+      ggplot2::coord_sf() +
+      ggplot2::theme_void() +
+      ggplot2::theme(legend.position = "right") +
+      ggplot2::labs(fill = "Loading")
+  }
+}
+
+#' Internal function for amplitude plotting
+#' @keywords internal
+.plot_amplitudes_internal <- function(x, scale = "standardized", scale_y = "fixed", events = NULL, layout = NULL) {
+
+  # Use provided layout or default to old behavior
+  if(is.null(layout)) {
+    facet_args <- list(nrow = 1)
+  } else {
+    facet_args <- layout
+  }
+
+  # Calculate scaling factors based on method
+  if(scale == "variance") {
+    # Multiply by sqrt(eigenvalue) to show variance contribution
+    eigs <- x$eigenvalues %>%
+      dplyr::select(PC, std.dev) %>%
+      dplyr::mutate(PC = paste0("PC", PC))
+
+    amps <- x$amplitudes %>%
+      tidyr::pivot_longer(-time, names_to = 'PC', values_to = 'amplitude') %>%
+      dplyr::left_join(eigs, by = 'PC') %>%
+      dplyr::mutate(amplitude = amplitude * std.dev)
+  } else if(scale == "raw") {
+    # Use EOF loadings to convert back to original units
+    eigs <- split(x$eofs) %>%
+      as_tibble() %>%
+      dplyr::summarise(dplyr::across(dplyr::starts_with('PC'), ~sqrt(sum(.x^2, na.rm = TRUE)))) %>%
+      tidyr::pivot_longer(dplyr::everything(), names_to = 'PC', values_to = 'scale_factor')
+
+    amps <- x$amplitudes %>%
+      tidyr::pivot_longer(-time, names_to = 'PC', values_to = 'amplitude') %>%
+      dplyr::left_join(eigs, by = 'PC') %>%
+      dplyr::mutate(amplitude = amplitude * scale_factor)
+  } else {
+    # Default: standardized (divide by sdev to get unit variance)
+    eigs <- x$eigenvalues %>%
+      dplyr::select(PC, std.dev) %>%
+      dplyr::mutate(PC = paste0("PC", PC))
+
+    amps <- x$amplitudes %>%
+      tidyr::pivot_longer(-time, names_to = 'PC', values_to = 'amplitude') %>%
+      dplyr::left_join(eigs, by = 'PC') %>%
+      dplyr::mutate(amplitude = amplitude / std.dev)
+  }
+
+  p <- ggplot2::ggplot(amps, ggplot2::aes(time, amplitude)) +
+    ggplot2::geom_line(color = "#1f78b4") +
+    do.call(ggplot2::facet_wrap, c(list(~PC), facet_args)) +
+    ggplot2::labs(y = "Amplitude", x = NULL)
+
+  if(scale_y == "fixed") {
+    p <- p + ggplot2::coord_cartesian(ylim = range(amps$amplitude, na.rm = TRUE))
+  }
+
+  if(!is.null(events)) {
+    p <- p + ggplot2::geom_vline(xintercept = events, linetype = 2, alpha = 0.5)
+  }
+
+  p + ggplot2::theme_bw()
 }
