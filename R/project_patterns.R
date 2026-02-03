@@ -20,6 +20,9 @@
 #' new_amplitudes <- project_patterns(patterns, new_data)
 #' }
 project_patterns <- function(patterns, newdata) {
+  # NOTE: No spatial compatibility validation currently performed.
+  # Assumes newdata has same spatial structure as original data used to create patterns.
+  # Mismatched data will cause errors downstream (matrix dimension mismatches).
 
   validate_patterns(patterns)
 
@@ -80,63 +83,6 @@ project_patterns <- function(patterns, newdata) {
 
   return(result)
 }
-
-#' Validate Spatial Compatibility Between Patterns and New Data
-#'
-#' Checks that new data is spatially compatible with existing patterns
-#'
-#' @param patterns A patterns object
-#' @param newdata A stars object with new data
-#'
-#' @return Invisible(TRUE) if compatible, stops with error if not
-#'
-#' @keywords internal
-validate_spatial_compatibility <- function(patterns, newdata) {
-
-  # Check that newdata is a stars object
-  if (!inherits(newdata, "stars")) {
-    cli::cli_abort("`newdata` must be a {.cls stars} object.")
-  }
-
-  # Check that spatial dimensions match
-  if (!has_geometry_dimension(newdata)) {
-    cli::cli_abort("`newdata` must include spatial dimensions.")
-  }
-
-  # Check that spatial dimensions are compatible
-  # Use existing get_spatial_dimensions function from get_patterns.R
-  pattern_spatial_dims <- get_spatial_dimensions(patterns$climatology)
-  newdata_spatial_dims <- get_spatial_dimensions(newdata)
-
-  # Basic compatibility check - both should have spatial dimensions
-  if (length(pattern_spatial_dims) == 0) {
-    cli::cli_abort("`patterns` object has no spatial dimensions.")
-  }
-
-  if (length(newdata_spatial_dims) == 0) {
-    cli::cli_abort("`newdata` has no spatial dimensions.")
-  }
-
-  # For more detailed validation, we'd need to check dimension sizes
-  # but this is a basic compatibility check
-
-  # Check variable names are compatible
-  pattern_vars <- names(patterns$climatology)
-  newdata_vars <- names(newdata)
-
-  if (!all(pattern_vars %in% newdata_vars)) {
-    missing_vars <- setdiff(pattern_vars, newdata_vars)
-    cli::cli_abort(
-      "`newdata` is missing variables present in patterns: {paste(missing_vars, collapse = ', ')}."
-    )
-  }
-
-  return(invisible(TRUE))
-}
-
-# Removed get_spatial_dimensions_patterns to avoid conflicts with existing function
-
-# Removed duplicate has_geometry_dimension function - using the one from get_patterns.R
 
 #' Project Multiple Datasets onto Patterns
 #'

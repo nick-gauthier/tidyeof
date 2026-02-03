@@ -1,13 +1,8 @@
-#' Title
-#'
-#' @param target_patterns
-#' @param amplitudes
-#'
-#' @return
-#' @export
-#'
-#' @examples
 #' Detect if variable should be non-negative
+#'
+#' Checks units and variable names to guess whether the data represents
+#' something that can't be negative (like precipitation).
+#'
 #' @param patterns A patterns object
 #' @return Logical indicating if non-negative constraint should apply
 #' @keywords internal
@@ -31,6 +26,24 @@ should_be_nonnegative <- function(patterns) {
   return(any(sapply(precip_patterns, function(p) grepl(p, var_names))))
 }
 
+#' Reconstruct spatial field from EOF amplitudes
+#'
+#' Converts PC amplitudes back into a full spatial-temporal field by multiplying
+#' by the EOF patterns and adding back the climatology.
+#'
+#' @param target_patterns A patterns object containing EOFs and climatology
+#' @param amplitudes Amplitudes to use for reconstruction. Can be:
+#'   - NULL (default): uses original amplitudes from target_patterns
+#'   - tibble: with time column and PC columns
+#'   - stars object: will be projected onto patterns first
+#' @param nonneg How to handle non-negative constraint (default: "auto"):
+#'   - "auto": guess based on units (mm, cm, etc.) or variable names containing
+#'     "precip", "rain", "snow", etc. If neither matches, allows negatives.
+#'   - TRUE: always clamp negative values to zero
+#'   - FALSE: always allow negative values
+#'
+#' @return A stars object with reconstructed spatial-temporal data
+#' @export
 reconstruct_field <- function(target_patterns, amplitudes = NULL, nonneg = "auto") {
   validate_patterns(target_patterns)
 
@@ -82,6 +95,10 @@ reconstruct_field <- function(target_patterns, amplitudes = NULL, nonneg = "auto
                                scale = target_patterns$scaled,
                                monthly = target_patterns$monthly)
 
+  # Clamp negative values to zero if nonneg is TRUE
+
+  # The `0 * .x` trick preserves units: pmax(.x, 0) would strip units,
+  # but pmax(.x, 0 * .x) keeps them because 0 * .x has the same units as .x
   if(nonneg) final <- mutate(final, across(everything(), ~pmax(.x, 0 * .x)))
 
   # Restore units for each variable

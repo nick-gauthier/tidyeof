@@ -46,6 +46,18 @@ get_climatology <- function(dat, monthly = FALSE) {
     }
 
     # Monthly climatology calculation
+    # NOTE: stars::aggregate has a bug where factor-returning grouping functions
+    # cause the new dimension to be named 'geometry' instead of 'time'. This happens
+    # because `by` gets reassigned from function -> character vector (factor levels)
+    # before the dimension naming logic runs, so is.function(by) returns FALSE.
+    # See: https://github.com/r-spatial/stars/blob/main/R/aggregate.R lines 151-156, 220-224
+    #
+    # We work around this by renaming 'geometry' -> 'month' after aggregation.
+    #
+    # LIMITATION: This approach will BREAK for sf-based stars objects (with a real
+    # 'geometry' dimension) because aggregate() will collide with the existing
+    # geometry dimension. When we add support for sf-based stars, this will need
+    # to be rewritten — likely using a manual grouping approach instead of aggregate().
     mean_result <- aggregate(dat, by_months, FUN = mean) %>%
       aperm(c(2, 3, 1)) %>%
       st_set_dimensions('geometry', names = 'month')
@@ -107,6 +119,8 @@ get_anomalies <- function(dat, clim = NULL, scale = FALSE, monthly = FALSE) {
     month_names <- as.character(unique(lubridate::month(times, label = TRUE, abbr = FALSE)))
 
     # Redimension to monthly structure and calculate anomalies
+    # NOTE: Hardcoded x, y dimension names assume raster-based stars.
+    # Will need revision for sf-based stars with geometry dimension.
     dat <- st_redimension(dat,
                                 c(x = dims[[1]],
                                   y = dims[[2]],
@@ -173,6 +187,8 @@ restore_climatology <- function(anomalies, clim, scale = FALSE, monthly = FALSE)
     month_names <- as.character(unique(lubridate::month(times, label = TRUE, abbr = FALSE)))
 
     # Redimension to monthly structure
+    # NOTE: Hardcoded x, y dimension names assume raster-based stars.
+    # Will need revision for sf-based stars with geometry dimension.
     anomalies <- st_redimension(anomalies,
                                  c(x = dims[[1]],
                                    y = dims[[2]],
@@ -188,6 +204,8 @@ restore_climatology <- function(anomalies, clim, scale = FALSE, monthly = FALSE)
 
     if(monthly) {
       # Restore original time dimension
+      # NOTE: Hardcoded x, y dimension names assume raster-based stars.
+      # Will need revision for sf-based stars with geometry dimension.
       out <- st_redimension(out,
                             c(x = dims[[1]],
                               y = dims[[2]],
@@ -209,24 +227,21 @@ by_months <- function(x) {
 }
 
 
-# convenience function to add back units . . . there has to be a better way!
+# Restore units from reference stars object to new stars object
 restore_units <- function(new, ref) {
-  old_units <- purrr::map(ref, purrr::possibly(units))
-  apply_units <- function(x, y) purrr::modify_in(x, names(old_units)[y], ~units::set_units(.x, old_units[[y]], mode = 'standard'))
-
-  seq_along(new) %>%
-    purrr::reduce(apply_units, .init = new)
-}
-
-
-#' Print method for climatology objects
-#' @export
-print.climatology <- function(x, ...) {
-  cli::cli_h1("Climatology Object")
-  cli::cli_text("Dimensions: {.field {glue_collapse(names(st_dimensions(x)), sep = ', ')}}")
-  if ("month" %in% names(st_dimensions(x))) {
-    cli::cli_text("Type: {.field Monthly}")
-  } else {
-    cli::cli_text("Type: {.field Annual}")
+  for (var in names(new)) {
+    ref_units <- tryCatch(units(ref[[var]]), error = function(e) NULL)
+    if (!is.null(ref_units)) {
+      new[[var]] <- units::set_units(new[[var]], ref_units, mode = 'standard')
+    }
   }
+  new
 }
+
+# Previous implementation (had potential bug if attribute order differed):
+# restore_units <- function(new, ref) {
+#   old_units <- purrr::map(ref, purrr::possibly(units))
+#   apply_units <- function(x, y) purrr::modify_in(x, names(old_units)[y], ~units::set_units(.x, old_units[[y]], mode = 'standard'))
+#   seq_along(new) %>%
+#     purrr::reduce(apply_units, .init = new)
+# }

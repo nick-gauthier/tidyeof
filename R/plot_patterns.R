@@ -174,7 +174,7 @@ print_significance <- function(signif_obj) {
   cat("Number of effective samples:", n_eff, "\n\n")
 
   for(i in seq_along(is_distinct)) {
-    cat(glue("EOF {i}: {ifelse(is_distinct[i], 'Distinct', 'May be degenerate')} (±{sampling_errors[i]:.3f})\\n"))
+    cat(glue::glue("EOF {i}: {ifelse(is_distinct[i], 'Distinct', 'May be degenerate')} (±{round(sampling_errors[i], 3)})\n"))
   }
 }
 #' Plot method for patterns objects
@@ -186,6 +186,9 @@ print_significance <- function(signif_obj) {
 #' @param scale For amplitudes: scaling method ("standardized", "variance", "raw")
 #' @param scale_y For amplitudes: y-axis scaling ("fixed" or "free")
 #' @param events For amplitudes: optional dates to mark with vertical lines
+#' @param overlay Optional sf object to overlay on EOF maps (e.g., coastlines, boundaries)
+#' @param overlay_color Color for overlay geometry (default "grey30")
+#' @param overlay_fill Fill for overlay geometry (default NA for no fill)
 #' @param ... Additional arguments (currently unused)
 #' @return A ggplot2 object or patchwork object for combined plots
 #' @export
@@ -196,6 +199,9 @@ plot.patterns <- function(x,
                           scale = c("standardized", "variance", "raw"),
                           scale_y = c("fixed", "free"),
                           events = NULL,
+                          overlay = NULL,
+                          overlay_color = "grey30",
+                          overlay_fill = NA,
                           ...) {
 
   type <- match.arg(type, c("combined", "eofs", "amplitudes"))
@@ -206,13 +212,13 @@ plot.patterns <- function(x,
     # Smart combined plot: EOFs above, PCs below with KISS layout logic
     if(!requireNamespace("patchwork", quietly = TRUE)) {
       warning("patchwork package needed for combined plots. Install with: install.packages('patchwork')\nShowing EOFs only.")
-      return(.plot_eofs_internal(x, scaled = scaled, rawdata = rawdata))
+      return(.plot_eofs_internal(x, scaled = scaled, rawdata = rawdata, overlay = overlay, overlay_color = overlay_color, overlay_fill = overlay_fill))
     } else {
       # Simple smart layout - covers 80% of use cases perfectly
       layout <- .simple_smart_layout(x$k)
 
       # Create EOF plot with smart layout
-      p_eofs <- .plot_eofs_internal(x, scaled = scaled, rawdata = rawdata, layout = layout$eof)
+      p_eofs <- .plot_eofs_internal(x, scaled = scaled, rawdata = rawdata, layout = layout$eof, overlay = overlay, overlay_color = overlay_color, overlay_fill = overlay_fill)
 
       # Create amplitude plot with matching layout
       p_amps <- .plot_amplitudes_internal(x, scale = scale, scale_y = scale_y, events = events, layout = layout$pc)
@@ -232,7 +238,7 @@ plot.patterns <- function(x,
              ggplot2::theme(plot.margin = ggplot2::margin(5, 5, 5, 5)))
     }
   } else if(type == "eofs") {
-    return(.plot_eofs_internal(x, scaled = scaled, rawdata = rawdata))
+    return(.plot_eofs_internal(x, scaled = scaled, rawdata = rawdata, overlay = overlay, overlay_color = overlay_color, overlay_fill = overlay_fill))
   } else if(type == "amplitudes") {
     return(.plot_amplitudes_internal(x, scale = scale, scale_y = scale_y, events = events))
   }
@@ -253,12 +259,16 @@ plot.patterns <- function(x,
 
 #' Internal function for EOF plotting
 #' @keywords internal
-.plot_eofs_internal <- function(x, scaled = FALSE, rawdata = NULL, layout = NULL) {
-  # Use provided layout or default to old behavior
-  if(is.null(layout)) {
-    facet_args <- list(nrow = 1)
+.plot_eofs_internal <- function(x, scaled = FALSE, rawdata = NULL, layout = NULL,
+                                 overlay = NULL, overlay_color = "grey30", overlay_fill = NA) {
+  # Use provided layout or let facet_wrap choose defaults
+  facet_args <- if(!is.null(layout)) layout else list()
+
+  # Build overlay layer if provided
+  overlay_layer <- if(!is.null(overlay)) {
+    ggplot2::geom_sf(data = overlay, fill = overlay_fill, color = overlay_color, inherit.aes = FALSE)
   } else {
-    facet_args <- layout
+    NULL
   }
 
   if(scaled) {
@@ -267,6 +277,7 @@ plot.patterns <- function(x,
     }
     ggplot2::ggplot() +
       stars::geom_stars(data = get_correlation(rawdata, x)) +
+      overlay_layer +
       do.call(ggplot2::facet_wrap, c(list(~PC), facet_args)) +
       ggplot2::scale_fill_distiller(palette = 'RdBu', na.value = NA, limits = c(-1, 1)) +
       ggplot2::coord_sf() +
@@ -276,6 +287,7 @@ plot.patterns <- function(x,
   } else {
     ggplot2::ggplot() +
       stars::geom_stars(data = x$eofs) +
+      overlay_layer +
       do.call(ggplot2::facet_wrap, c(list(~PC), facet_args)) +
       scico::scale_fill_scico(palette = 'vik', midpoint = 0, na.value = NA) +
       ggplot2::coord_sf() +
@@ -289,12 +301,8 @@ plot.patterns <- function(x,
 #' @keywords internal
 .plot_amplitudes_internal <- function(x, scale = "standardized", scale_y = "fixed", events = NULL, layout = NULL) {
 
-  # Use provided layout or default to old behavior
-  if(is.null(layout)) {
-    facet_args <- list(nrow = 1)
-  } else {
-    facet_args <- layout
-  }
+  # Use provided layout or let facet_wrap choose defaults
+  facet_args <- if(!is.null(layout)) layout else list()
 
   # Calculate scaling factors based on method
   if(scale == "variance") {
@@ -331,7 +339,7 @@ plot.patterns <- function(x,
   }
 
   p <- ggplot2::ggplot(amps, ggplot2::aes(time, amplitude)) +
-    ggplot2::geom_line(color = "#1f78b4") +
+    ggplot2::geom_line() +
     do.call(ggplot2::facet_wrap, c(list(~PC), facet_args)) +
     ggplot2::labs(y = "Amplitude", x = NULL)
 

@@ -1,11 +1,12 @@
-#' Domain alignment for climate patterns
+#' Flip EOF patterns to have consistent sign
 #'
-#' @param patterns
+#' Ensures all EOF patterns have positive-dominant loadings by flipping the sign
+#' of both the spatial pattern and corresponding amplitude time series when needed.
+#' This makes plotting and interpretation more consistent across analyses.
 #'
-#' @return
-#' @export
-#'
-#' @examples
+#' @param patterns A patterns object from get_patterns()
+#' @return The patterns object with signs adjusted for consistency
+#' @keywords internal
 flip_patterns <- function(patterns) {
   # this function tries to make sure all the patterns have roughly the same major sign, which makes plotting easier
   # alternatively could try to align to original time series variable as well

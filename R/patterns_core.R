@@ -22,7 +22,7 @@ check_stars_object <- function(x, arg = rlang::caller_arg(x), call = rlang::call
 #' @param call Calling environment for error messages
 #' @keywords internal
 check_k_valid <- function(k, max_k, arg = rlang::caller_arg(k), call = rlang::caller_env()) {
-  if (!is.numeric(k) || length(k) != 1 || k < 1 || k > max_k) {
+  if (!is.numeric(k) || length(k) != 1 || k < 1 || k > max_k || k != floor(k)) {
     cli::cli_abort(
       "Argument {.arg {arg}} must be a single integer between 1 and {max_k}.",
       class = "tidyEOF_invalid_k",
@@ -129,10 +129,7 @@ rotate_pca_components <- function(loadings_matrix, scores_matrix, sdev_vector) {
 #' @param weights Optional numeric vector of spatial weights (one per spatial
 #'   location) to be applied to the anomalies before PCA
 #' @keywords internal
-get_eofs <- function(dat, k, rotate = FALSE, irlba_threshold = 50000, weights = NULL) {
-  # Save original dimension info
-  orig_dims <- stars::st_dimensions(dat)
-  orig_crs <- sf::st_crs(dat)
+get_eofs <- function(dat, k, rotate = FALSE, irlba_threshold, weights = NULL) {
   times <- stars::st_get_dimension_values(dat, "time")
   dims <- dim(dat)
 
@@ -291,39 +288,23 @@ has_geometry_dimension <- function(dat) {
 get_spatial_dimensions <- function(dat) {
   if (has_geometry_dimension(dat)) {
     return("geometry")
-  } else {
-    # For raster, look for common spatial dimension name patterns
-    dims <- stars::st_dimensions(dat)
-    dim_names <- names(dims)
-
-    # Common x-y dimension name patterns
-    x_patterns <- c("x", "lon", "longitude")
-    y_patterns <- c("y", "lat", "latitude")
-
-    x_dim <- dim_names[tolower(dim_names) %in% x_patterns][1]
-    y_dim <- dim_names[tolower(dim_names) %in% y_patterns][1]
-
-    if (!is.na(x_dim) && !is.na(y_dim)) {
-      return(c(x_dim, y_dim))
-    } else {
-      # Fallback: look for dimensions with spatial reference systems
-      spatial_dims <- sapply(dims, function(d) !all(is.na(d$refsys)))
-      spatial_names <- names(dims)[spatial_dims]
-
-      # Filter out time and other non-spatial dimensions
-      spatial_names <- spatial_names[!spatial_names %in% c("time", "band", "PC", "statistic")]
-
-      if (length(spatial_names) >= 2) {
-        return(spatial_names[1:2])
-      } else if (length(spatial_names) == 1) {
-        return(spatial_names)
-      } else {
-        # Final fallback: first two dimensions that aren't time
-        non_time_dims <- dim_names[!dim_names %in% c("time", "band", "PC", "statistic")]
-        return(non_time_dims[1:min(2, length(non_time_dims))])
-      }
-    }
   }
+
+  dim_names <- names(stars::st_dimensions(dat))
+  x_patterns <- c("x", "lon", "longitude", "easting")
+  y_patterns <- c("y", "lat", "latitude", "northing")
+
+  x_dim <- dim_names[tolower(dim_names) %in% x_patterns][1]
+  y_dim <- dim_names[tolower(dim_names) %in% y_patterns][1]
+
+  if (is.na(x_dim) || is.na(y_dim)) {
+    cli::cli_abort(
+      "Could not find spatial dimensions. Expected 'x'/'lon'/'longitude'/'easting' and 'y'/'lat'/'latitude'/'northing', or 'geometry'.",
+      class = "tidyEOF_invalid_dimensions"
+    )
+  }
+
+  c(x_dim, y_dim)
 }
 
 #' Compute area-based weights for spatial data
@@ -377,7 +358,7 @@ names0 <- function(num, prefix = "PC") {
 #' @return A PCA result object compatible with `prcomp()` output
 #' @keywords internal
 perform_pca_smart <- function(x, k = NULL, center = TRUE, scale. = FALSE,
-                              size_threshold = 50000, ...) {
+                              size_threshold, ...) {
 
   # Calculate data size
   data_size <- nrow(x) * ncol(x)

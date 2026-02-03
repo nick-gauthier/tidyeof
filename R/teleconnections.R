@@ -1,23 +1,25 @@
 #' Calculate teleconnections between a patterns object and another layer
 #'
-#'The function will check if there are any overlapping time steps between the
-#'raster field and the PC amplitudes.
-#' @param dat
-#' @param patterns
+#' Computes pixel-wise correlations between a spatiotemporal field and each
+#' PC amplitude time series. Checks for overlapping time steps between the
+#' raster field and the PC amplitudes.
 #'
-#' @return
+#' @param dat A stars object with a time dimension
+#' @param patterns A patterns object from get_patterns()
+#' @param amplitudes Optional amplitudes tibble (defaults to patterns$amplitudes)
+#'
+#' @return A stars object with correlation values for each PC
 #' @export
-#'
-#' @examples
 get_correlation <- function(dat, patterns, amplitudes = NULL) {
   if(is.null(amplitudes)) amplitudes <- patterns$amplitudes
 
   times_amps <- amplitudes$time
   times_dat <- st_get_dimension_values(dat, 'time')
-  times_cor <- intersect(times_amps, times_dat)
+  # Use subsetting to preserve Date/POSIXct class (intersect can strip it)
+  times_cor <- times_amps[times_amps %in% times_dat]
 
-  if(length(times_cor) <= 0) stop ('Need at least two time steps in common') # add to tests
-  if(!(identical(times_cor, times_amps) & identical(times_cor, times_dat))) warning('Using the time period ', first(times_cor), ' to ', last(times_cor))
+  if(length(times_cor) <= 0) cli::cli_abort("Need at least two time steps in common.")
+  if(!(identical(times_cor, times_amps) & identical(times_cor, times_dat))) cli::cli_inform("Using the time period {first(times_cor)} to {last(times_cor)}.")
 
   amps <- filter(amplitudes, time %in% times_cor) %>%
     select(-time)
@@ -30,16 +32,28 @@ get_correlation <- function(dat, patterns, amplitudes = NULL) {
   )
 }
 
+#' Calculate FDR-corrected significance contours for teleconnections
+#'
+#' Computes pixel-wise correlations with FDR correction and returns significance
+#' contour lines as sf polygons.
+#'
+#' @param dat A stars object with a time dimension
+#' @param patterns A patterns object from get_patterns()
+#' @param fdr False discovery rate threshold (default 0.1)
+#' @param amplitudes Optional amplitudes tibble (defaults to patterns$amplitudes)
+#'
+#' @return An sf object with significance contour polygons for each PC
 #' @export
 get_fdr <- function(dat, patterns, fdr = 0.1, amplitudes = NULL) {
   if(is.null(amplitudes)) amplitudes <- patterns$amplitudes
 
   times_amps <- amplitudes$time
   times_dat <- st_get_dimension_values(dat, 'time')
-  times_cor <- intersect(times_amps, times_dat)
+  # Use subsetting to preserve Date/POSIXct class (intersect can strip it)
+  times_cor <- times_amps[times_amps %in% times_dat]
 
-  if(length(times_cor) <= 0) stop ('Need at least two time steps in common') # add to tests
-  if(!(identical(times_cor, times_amps) & identical(times_cor, times_dat))) warning('Using the time period ', first(times_cor), ' to ', last(times_cor))
+  if(length(times_cor) <= 0) cli::cli_abort("Need at least two time steps in common.")
+  if(!(identical(times_cor, times_amps) & identical(times_cor, times_dat))) cli::cli_inform("Using the time period {first(times_cor)} to {last(times_cor)}.")
 
   amps <- filter(amplitudes, time %in% times_cor) %>%
     select(-time)

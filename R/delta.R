@@ -1,13 +1,15 @@
-#' Delta change methods
+#' Multiplicative delta change method
 #'
-#' @param pred
-#' @param obs
-#' @param newdata
+#' Applies multiplicative bias correction by dividing new data by predictor
+#' climatology and multiplying by observed climatology.
 #'
-#' @return
+#' @param pred Predictor stars object (e.g., coarse-resolution model)
+#' @param obs Observed stars object (e.g., fine-resolution observations)
+#' @param newdata New predictor data to downscale (defaults to pred)
+#' @param monthly Logical, use monthly climatology (default FALSE)
+#'
+#' @return A stars object with bias-corrected values
 #' @export
-#'
-#' @examples
 delta_mul <- function(pred, obs, newdata = NULL, monthly = FALSE) {
   if(is.null(newdata)) newdata <- pred
 
@@ -27,6 +29,17 @@ delta_mul <- function(pred, obs, newdata = NULL, monthly = FALSE) {
   }
 }
 
+#' Additive delta change method
+#'
+#' Applies additive bias correction by subtracting predictor climatology
+#' and adding observed climatology.
+#'
+#' @param pred Predictor stars object (e.g., coarse-resolution model)
+#' @param obs Observed stars object (e.g., fine-resolution observations)
+#' @param newdata New predictor data to downscale (defaults to pred)
+#' @param monthly Logical, use monthly climatology (default FALSE)
+#'
+#' @return A stars object with bias-corrected values
 #' @export
 delta_add <- function(pred, obs, newdata = NULL, monthly = FALSE) {
   if(is.null(newdata)) newdata <- pred

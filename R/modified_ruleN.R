@@ -1,14 +1,15 @@
-#' Title
+#' Test EOF significance using modified Rule N
 #'
-#' @param lambdas
-#' @param k
-#' @param M
-#' @param n
+#' Tests whether the k-th eigenvalue is significantly different from noise
+#' using a modified Rule N approach based on Tracy-Widom distribution.
 #'
-#' @return
+#' @param lambdas Vector of eigenvalues from PCA
+#' @param k Index of eigenvalue to test
+#' @param M Number of spatial points (grid cells)
+#' @param n Number of time steps
+#'
+#' @return Logical, TRUE if eigenvalue is significant at p < 0.05
 #' @export
-#'
-#' @examples
 eigen_test <- function(lambdas, k, M, n){
   nrank<- min(n - 1, M)
 

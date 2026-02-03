@@ -29,13 +29,16 @@
 predict.coupled_patterns <- function(object, newdata, k = NULL, reconstruct = TRUE,
                                    nonneg = "auto", ...) {
 
+
   # Validate inputs
   if (!inherits(object, "coupled_patterns")) {
-    stop("object must be a coupled_patterns object from couple_patterns()")
+    cli::cli_abort("object must be a coupled_patterns object from couple_patterns()",
+                   class = "tidyEOF_invalid_input")
   }
 
   if (object$method != "cca") {
-    stop("Only CCA-based coupled_patterns objects are supported")
+    cli::cli_abort("Only CCA-based coupled_patterns objects are supported",
+                   class = "tidyEOF_unsupported_method")
   }
 
   # Use object's k if not specified
@@ -95,6 +98,7 @@ apply_cca_prediction <- function(new_amplitudes, cca_result, k) {
     dplyr::select(-time) %>%
     as.matrix()
 
+
   # Apply CCA transformation:
   # 1. Transform predictors to canonical variables
   # 2. Apply canonical correlations
@@ -103,7 +107,9 @@ apply_cca_prediction <- function(new_amplitudes, cca_result, k) {
   canonical_responses <- canonical_predictors %*% diag(cca_result$cor[1:k], nrow = k)
 
   # Transform canonical responses back to PC space
-  response_amplitudes <- canonical_responses %*% solve(cca_result$ycoef[1:ncol(cca_result$ycoef), 1:k, drop = FALSE])
+  # Use generalized inverse (ginv) to handle case where k < number of response PCs
+  ycoef_subset <- cca_result$ycoef[, 1:k, drop = FALSE]
+  response_amplitudes <- canonical_responses %*% MASS::ginv(ycoef_subset)
 
   # Convert back to tibble with proper column names
   n_response_pcs <- ncol(response_amplitudes)
