@@ -20,7 +20,7 @@ couple_patterns(
 
 \item{k}{Number of CCA modes to retain. If NULL, uses min(ncol(predictor), ncol(response))}
 
-\item{method}{Coupling method. Currently only "cca" is supported in the refactored version}
+\item{method}{Coupling method. Currently only "cca" is supported}
 
 \item{center}{Logical, whether to center the data before CCA (default: FALSE)}
 

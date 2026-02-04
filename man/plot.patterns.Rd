@@ -12,6 +12,9 @@
   scale = c("standardized", "variance", "raw"),
   scale_y = c("fixed", "free"),
   events = NULL,
+  overlay = NULL,
+  overlay_color = "grey30",
+  overlay_fill = NA,
   ...
 )
 }
@@ -29,6 +32,12 @@
 \item{scale_y}{For amplitudes: y-axis scaling ("fixed" or "free")}
 
 \item{events}{For amplitudes: optional dates to mark with vertical lines}
+
+\item{overlay}{Optional sf object to overlay on EOF maps (e.g., coastlines, boundaries)}
+
+\item{overlay_color}{Color for overlay geometry (default "grey30")}
+
+\item{overlay_fill}{Fill for overlay geometry (default NA for no fill)}
 
 \item{...}{Additional arguments (currently unused)}
 }

@@ -304,12 +304,18 @@ plot.patterns <- function(x,
   # Use provided layout or let facet_wrap choose defaults
   facet_args <- if(!is.null(layout)) layout else list()
 
+
+  # Get PC names directly from amplitudes to ensure matching
+
+  pc_names <- names(x$amplitudes)[-1]  # exclude 'time' column
+
   # Calculate scaling factors based on method
   if(scale == "variance") {
     # Multiply by sqrt(eigenvalue) to show variance contribution
     eigs <- x$eigenvalues %>%
+      dplyr::filter(PC <= x$k) %>%
       dplyr::select(PC, std.dev) %>%
-      dplyr::mutate(PC = paste0("PC", PC))
+      dplyr::mutate(PC = pc_names[PC])
 
     amps <- x$amplitudes %>%
       tidyr::pivot_longer(-time, names_to = 'PC', values_to = 'amplitude') %>%
@@ -329,8 +335,9 @@ plot.patterns <- function(x,
   } else {
     # Default: standardized (divide by sdev to get unit variance)
     eigs <- x$eigenvalues %>%
+      dplyr::filter(PC <= x$k) %>%
       dplyr::select(PC, std.dev) %>%
-      dplyr::mutate(PC = paste0("PC", PC))
+      dplyr::mutate(PC = pc_names[PC])
 
     amps <- x$amplitudes %>%
       tidyr::pivot_longer(-time, names_to = 'PC', values_to = 'amplitude') %>%

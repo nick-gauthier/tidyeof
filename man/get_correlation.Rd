@@ -7,9 +7,17 @@
 get_correlation(dat, patterns, amplitudes = NULL)
 }
 \arguments{
-\item{patterns}{}
+\item{dat}{A stars object with a time dimension}
+
+\item{patterns}{A patterns object from get_patterns()}
+
+\item{amplitudes}{Optional amplitudes tibble (defaults to patterns$amplitudes)}
+}
+\value{
+A stars object with correlation values for each PC
 }
 \description{
-The function will check if there are any overlapping time steps between the
+Computes pixel-wise correlations between a spatiotemporal field and each
+PC amplitude time series. Checks for overlapping time steps between the
 raster field and the PC amplitudes.
 }

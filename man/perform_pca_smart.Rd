@@ -9,7 +9,7 @@ perform_pca_smart(
   k = NULL,
   center = TRUE,
   scale. = FALSE,
-  size_threshold = 50000,
+  size_threshold,
   ...
 )
 }

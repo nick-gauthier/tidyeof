@@ -4,7 +4,7 @@
 \alias{get_eofs}
 \title{Internal function to calculate EOFs and related components}
 \usage{
-get_eofs(dat, k, rotate = FALSE, irlba_threshold = 50000, weights = NULL)
+get_eofs(dat, k, rotate = FALSE, irlba_threshold, weights = NULL)
 }
 \arguments{
 \item{weights}{Optional numeric vector of spatial weights (one per spatial

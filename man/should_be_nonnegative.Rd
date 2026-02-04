@@ -2,22 +2,18 @@
 % Please edit documentation in R/reconstruct_field.R
 \name{should_be_nonnegative}
 \alias{should_be_nonnegative}
-\title{Title}
+\title{Detect if variable should be non-negative}
 \usage{
 should_be_nonnegative(patterns)
 }
 \arguments{
 \item{patterns}{A patterns object}
-
-\item{amplitudes}{}
 }
 \value{
 Logical indicating if non-negative constraint should apply
 }
 \description{
-Title
-}
-\examples{
-Detect if variable should be non-negative
+Checks units and variable names to guess whether the data represents
+something that can't be negative (like precipitation).
 }
 \keyword{internal}

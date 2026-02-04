@@ -4,7 +4,15 @@
 \alias{.plot_eofs_internal}
 \title{Internal function for EOF plotting}
 \usage{
-.plot_eofs_internal(x, scaled = FALSE, rawdata = NULL, layout = NULL)
+.plot_eofs_internal(
+  x,
+  scaled = FALSE,
+  rawdata = NULL,
+  layout = NULL,
+  overlay = NULL,
+  overlay_color = "grey30",
+  overlay_fill = NA
+)
 }
 \description{
 Internal function for EOF plotting
