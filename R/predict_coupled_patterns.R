@@ -98,6 +98,14 @@ apply_cca_prediction <- function(new_amplitudes, cca_result, k) {
     dplyr::select(-time) %>%
     as.matrix()
 
+  # Apply training centering if CCA was fit with centering
+  if (!identical(cca_result$xcenter, FALSE)) {
+    xcenter <- cca_result$xcenter
+    if (!is.null(names(xcenter)) && !is.null(colnames(pred_matrix))) {
+      xcenter <- xcenter[colnames(pred_matrix)]
+    }
+    pred_matrix <- sweep(pred_matrix, 2, xcenter, "-")
+  }
 
   # Apply CCA transformation:
   # 1. Transform predictors to canonical variables
@@ -107,9 +115,22 @@ apply_cca_prediction <- function(new_amplitudes, cca_result, k) {
   canonical_responses <- canonical_predictors %*% diag(cca_result$cor[1:k], nrow = k)
 
   # Transform canonical responses back to PC space
-  # Use generalized inverse (ginv) to handle case where k < number of response PCs
-  ycoef_subset <- cca_result$ycoef[, 1:k, drop = FALSE]
-  response_amplitudes <- canonical_responses %*% MASS::ginv(ycoef_subset)
+  # Use the full inverse (or pseudoinverse) then keep the first k canonical modes
+  if (nrow(cca_result$ycoef) == ncol(cca_result$ycoef)) {
+    ycoef_inv <- solve(cca_result$ycoef)
+  } else {
+    ycoef_inv <- MASS::ginv(cca_result$ycoef)
+  }
+  response_amplitudes <- canonical_responses %*% ycoef_inv[1:k, , drop = FALSE]
+
+  # Add back response centering if used during training
+  if (!identical(cca_result$ycenter, FALSE)) {
+    ycenter <- cca_result$ycenter
+    if (!is.null(names(ycenter)) && !is.null(colnames(response_amplitudes))) {
+      ycenter <- ycenter[colnames(response_amplitudes)]
+    }
+    response_amplitudes <- sweep(response_amplitudes, 2, ycenter, "+")
+  }
 
   # Convert back to tibble with proper column names
   n_response_pcs <- ncol(response_amplitudes)
@@ -163,6 +184,22 @@ get_canonical_variables <- function(object, data, type = c("predictor", "respons
     dplyr::select(-time) %>%
     as.matrix()
 
+  # Apply training centering so canonical variables match cancor() inputs
+  if (type == "predictor" && !identical(object$cca$xcenter, FALSE)) {
+    xcenter <- object$cca$xcenter
+    if (!is.null(names(xcenter)) && !is.null(colnames(amp_matrix))) {
+      xcenter <- xcenter[colnames(amp_matrix)]
+    }
+    amp_matrix <- sweep(amp_matrix, 2, xcenter, "-")
+  }
+  if (type == "response" && !identical(object$cca$ycenter, FALSE)) {
+    ycenter <- object$cca$ycenter
+    if (!is.null(names(ycenter)) && !is.null(colnames(amp_matrix))) {
+      ycenter <- ycenter[colnames(amp_matrix)]
+    }
+    amp_matrix <- sweep(amp_matrix, 2, ycenter, "-")
+  }
+
   canonical_vars <- amp_matrix %*% coef_matrix
 
   # Return as tibble
@@ -193,6 +230,11 @@ get_canonical_correlations <- function(object, k = NULL) {
 
   correlations <- object$cca$cor[1:k]
 
+  # TODO: variance_explained calculation is misleading. Squared canonical
+
+  # correlations are not directly interpretable as variance explained like PCA
+  # eigenvalues. For proper variance decomposition in CCA, need to compute
+  # redundancy indices or use Stewart-Love indices. Fix or rename this column.
   result <- data.frame(
     mode = 1:k,
     correlation = correlations,
