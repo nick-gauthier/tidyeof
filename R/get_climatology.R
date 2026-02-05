@@ -39,6 +39,8 @@ get_climatology <- function(dat, monthly = FALSE) {
 
   if (monthly) {
     # Check for complete years
+    # FIXME: This warns, but get_anomalies() aborts on the same condition.
+    # Pick one behavior and use it consistently.
     times <- st_get_dimension_values(dat, 'time')
     n_times <- length(times)
     if (n_times %% 12 != 0) {
@@ -119,8 +121,12 @@ get_anomalies <- function(dat, clim = NULL, scale = FALSE, monthly = FALSE) {
     month_names <- unique(format(times, "%B"))
 
     # Redimension to monthly structure and calculate anomalies
-    # NOTE: Hardcoded x, y dimension names assume raster-based stars.
-    # Will need revision for sf-based stars with geometry dimension.
+    # FIXME: Three issues with monthly path:
+    # 1. Hardcoded x, y dimension names — breaks for lon/lat/easting/northing.
+    #    Should use get_spatial_dimensions() like the rest of the package.
+    # 2. Hardcoded month = 12 assumes monthly data — sub-monthly or seasonal
+    #    data will silently produce wrong results. No validation.
+    # 3. Will break for sf-based stars with geometry dimension.
     dat <- st_redimension(dat,
                                 c(x = dims[[1]],
                                   y = dims[[2]],
@@ -187,8 +193,8 @@ restore_climatology <- function(anomalies, clim, scale = FALSE, monthly = FALSE)
     month_names <- unique(format(times, "%B"))
 
     # Redimension to monthly structure
-    # NOTE: Hardcoded x, y dimension names assume raster-based stars.
-    # Will need revision for sf-based stars with geometry dimension.
+    # FIXME: Same issues as get_anomalies() — hardcoded x/y, assumes monthly,
+    # breaks for sf geometry. Fix all three together.
     anomalies <- st_redimension(anomalies,
                                  c(x = dims[[1]],
                                    y = dims[[2]],
@@ -204,8 +210,8 @@ restore_climatology <- function(anomalies, clim, scale = FALSE, monthly = FALSE)
 
     if(monthly) {
       # Restore original time dimension
-      # NOTE: Hardcoded x, y dimension names assume raster-based stars.
-      # Will need revision for sf-based stars with geometry dimension.
+      # FIXME: Same issues as get_anomalies() — hardcoded x/y, assumes monthly,
+      # breaks for sf geometry. Fix all three together.
       out <- st_redimension(out,
                             c(x = dims[[1]],
                               y = dims[[2]],

@@ -1,4 +1,4 @@
-Package: tidyEOF
+Package: tidyeof
 Type: Package
 Title: Tidy Empirical Orthogonal Functions and Spatial Downscaling
 Version: 0.1.0
@@ -13,7 +13,8 @@ Depends:
     R (>= 2.10)
 Suggests:
     testthat (>= 3.0.0),
-    patchwork
+    patchwork,
+    furrr
 Config/testthat/edition: 3
 Imports:
     rlang,
@@ -21,10 +22,10 @@ Imports:
     cli,
     stars,
     dplyr,
-    broom,
     tidyr,
-    stringr,
-    methods,
     sf,
     ggplot2,
-    scico
+    scico,
+    purrr,
+    units,
+    MASS

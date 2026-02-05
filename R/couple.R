@@ -108,12 +108,13 @@ couple <- function(predictor_patterns, response_patterns, k = NULL,
 #' @param ... Additional arguments (ignored)
 #' @export
 print.coupled_patterns <- function(x, ...) {
-  cat("Coupled Patterns Object\n")
-  cat("Method:", x$method, "\n")
-  cat("CCA modes retained:", x$k, "\n")
-  cat("Canonical correlations:", round(x$cca$cor[1:x$k], 3), "\n")
-  cat("Predictor patterns:", ncol(extract_amplitudes_matrix(x$predictor_patterns)), "PCs\n")
-  cat("Response patterns:", ncol(extract_amplitudes_matrix(x$response_patterns)), "PCs\n")
+  cli::cli_h1("Coupled Patterns Object")
+  cli::cli_text("Method: {.field {x$method}}")
+  cli::cli_text("CCA modes retained: {.field {x$k}}")
+  cli::cli_text("Canonical correlations: {.val {round(x$cca$cor[1:x$k], 3)}}")
+  cli::cli_text("Predictor patterns: {.field {ncol(extract_amplitudes_matrix(x$predictor_patterns))}} PCs")
+  cli::cli_text("Response patterns: {.field {ncol(extract_amplitudes_matrix(x$response_patterns))}} PCs")
+  invisible(x)
 }
 
 #' Summary method for coupled_patterns
@@ -121,13 +122,13 @@ print.coupled_patterns <- function(x, ...) {
 #' @param ... Additional arguments (ignored)
 #' @export
 summary.coupled_patterns <- function(object, ...) {
-  cat("Coupled Patterns Summary\n")
-  cat("========================\n\n")
-  cat("Method:", object$method, "\n")
-  cat("CCA modes retained:", object$k, "\n")
-  cat("Centered:", object$center, "\n\n")
-  cat("Canonical Correlations:\n")
+  cli::cli_h1("Coupled Patterns Summary")
+  cli::cli_text("Method: {.field {object$method}}")
+  cli::cli_text("CCA modes retained: {.field {object$k}}")
+  cli::cli_text("Centered: {.field {object$center}}")
+  cli::cli_h2("Canonical Correlations")
   print(get_canonical_correlations(object))
+  invisible(object)
 }
 
 # Helper function to extract amplitude matrices from patterns objects
@@ -548,15 +549,10 @@ get_canonical_correlations <- function(object, k = NULL) {
 
   correlations <- object$cca$cor[1:k]
 
-  # TODO: variance_explained calculation is misleading. Squared canonical
-  # correlations are not directly interpretable as variance explained like PCA
-  # eigenvalues. For proper variance decomposition in CCA, need to compute
-  # redundancy indices or use Stewart-Love indices. Fix or rename this column.
   result <- data.frame(
     mode = 1:k,
     correlation = correlations,
-    correlation_squared = correlations^2,
-    variance_explained = correlations^2 / sum(correlations^2) * 100
+    correlation_squared = correlations^2
   )
 
   return(result)

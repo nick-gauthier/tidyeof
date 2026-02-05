@@ -14,9 +14,9 @@ delta_mul <- function(pred, obs, newdata = NULL, monthly = FALSE) {
   if(is.null(newdata)) newdata <- pred
 
   pred_clim <- get_climatology(pred, monthly = monthly) %>%
-    slice('var', 1)
+    slice('statistic', 1)
   obs_clim <- get_climatology(obs, monthly = monthly) %>%
-    slice('var', 1)
+    slice('statistic', 1)
 
   if(monthly) {
     sweep_months(newdata, pred_clim, '/') %>%
@@ -45,9 +45,9 @@ delta_add <- function(pred, obs, newdata = NULL, monthly = FALSE) {
   if(is.null(newdata)) newdata <- pred
 
   pred_clim <- get_climatology(pred, monthly = monthly) %>%
-    slice('var', 1)
+    slice('statistic', 1)
   obs_clim <- get_climatology(obs, monthly = monthly) %>%
-    slice('var', 1)
+    slice('statistic', 1)
 
   if(monthly) {
     sweep_months(newdata, pred_clim, '-') %>%

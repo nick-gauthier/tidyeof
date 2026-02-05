@@ -24,6 +24,9 @@ get_correlation <- function(dat, patterns, amplitudes = NULL) {
   amps <- filter(amplitudes, time %in% times_cor) %>%
     select(-time)
 
+  # FIXME: aperm(c(2,3,1)) assumes 3D raster (x, y, PC). Will break for
+
+  # sf geometry-based stars objects where the array is 2D (geometry, PC).
   suppressWarnings( # suppress warnings that sd is zero
   filter(dat, time %in% times_cor) %>%
   st_apply(get_spatial_dimensions(.), function(x) cor(x, amps), .fname = 'PC') %>%
@@ -58,6 +61,7 @@ get_fdr <- function(dat, patterns, fdr = 0.1, amplitudes = NULL) {
   amps <- filter(amplitudes, time %in% times_cor) %>%
     select(-time)
 
+  # FIXME: aperm(c(2,3,1)) assumes 3D raster — same geometry issue as get_correlation().
   suppressWarnings( # suppress warnings that sd is zero
     fdr_rast <- filter(dat, time %in% times_cor) %>%
       st_apply(get_spatial_dimensions(.), fdr_fun, amps = amps, .fname = 'PC') %>%

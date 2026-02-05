@@ -22,7 +22,7 @@ screeplot.patterns <- function(x, k = NULL, kmax = 10, ...) {
     ggplot2::geom_point(size = 2, aes(color = multiplet)) +
     ggplot2::geom_text(aes(x = PC, y = cumvar_line, label = glue::glue("{round(cumulative, 0)}%")), size = 2.5, vjust = 0) +
     ggplot2::labs(x = "Principal Component", y = "Normalized Eigenvalue") +
-    ggplot2::geom_vline(xintercept = k + .5, linetype = 2, color = 'red', alpha = .7) +
+    { if (!is.null(k)) ggplot2::geom_vline(xintercept = k + .5, linetype = 2, color = 'red', alpha = .7) } +
     ggplot2::theme_bw() +
     ggplot2::guides(color = 'none') +
     ggplot2::scale_x_continuous(breaks = seq(0, 25, 5)) +
