@@ -7,11 +7,9 @@
 #' @param monthly Logical. If TRUE, computes monthly climatology. If FALSE (default),
 #'   computes statistics over the entire period.
 #'
-#' @return A stars object with:
-#'   - Original spatial dimensions (x, y)
-#'   - For monthly climatology: Additional month dimension with values from month.name
-#'   - Additional statistic dimension containing 'mean' and 'sd' statistics
-#'   - Original units preserved from input data
+#' @return A list with two stars objects:
+#'   \item{mean}{Climatological mean with original spatial dimensions and units}
+#'   \item{sd}{Climatological standard deviation with same structure}
 #'
 #' @examples
 #' # Create sample data
@@ -74,11 +72,10 @@ get_climatology <- function(dat, monthly = FALSE) {
     sd_result <- st_apply(dat, spatial_dims, sd, na.rm = TRUE, rename = FALSE)
   }
 
-  # Combine and restore units
-  result <- c(mean = mean_result, sd = sd_result, along = 'statistic') %>%
-    restore_units(dat)
-
-  return(result)
+  list(
+    mean = restore_units(mean_result, dat),
+    sd = restore_units(sd_result, dat)
+  )
 }
 
 #' Calculate anomalies from a climatological mean
@@ -98,13 +95,13 @@ get_anomalies <- function(dat, clim = NULL, scale = FALSE, monthly = FALSE) {
   # Get or validate climatology
   if (is.null(clim)) {
     clim <- get_climatology(dat, monthly = monthly)
-  } else if (!inherits(clim, "stars")) {
-    rlang::abort("climatology must be a stars object", class = "tidyeof_invalid_input")
+  } else if (!is.list(clim) || !all(c("mean", "sd") %in% names(clim))) {
+    rlang::abort("climatology must be a list with 'mean' and 'sd' stars objects (from get_climatology())",
+                 class = "tidyeof_invalid_input")
   }
 
-  # Extract statistics
-  mn <- slice(clim, 'statistic', 1)
-  stdev <- slice(clim, 'statistic', 2)
+  mn <- clim$mean
+  stdev <- clim$sd
 
   # Compute anomalies
   if (monthly) {
@@ -160,13 +157,13 @@ restore_climatology <- function(anomalies, clim, scale = FALSE, monthly = FALSE)
   if (!inherits(anomalies, "stars")) {
     rlang::abort("Anomalies must be a stars object", class = "tidyeof_invalid_input")
   }
-  if (!inherits(clim, "stars")) {
-    rlang::abort("Climatology must be a stars object", class = "tidyeof_invalid_input")
+  if (!is.list(clim) || !all(c("mean", "sd") %in% names(clim))) {
+    rlang::abort("Climatology must be a list with 'mean' and 'sd' stars objects (from get_climatology())",
+                 class = "tidyeof_invalid_input")
   }
 
-  # Extract statistics and handle units properly
-  target_mean <- slice(clim, 'statistic', 1)
-  target_sd <- slice(clim, 'statistic', 2)
+  target_mean <- clim$mean
+  target_sd <- clim$sd
 
   # Check if anomalies and climatology have matching units
   anomalies_has_units <- any(sapply(names(anomalies), function(var) !is.null(tryCatch(units(anomalies[[var]]), error = function(e) NULL))))
@@ -220,7 +217,7 @@ restore_climatology <- function(anomalies, clim, scale = FALSE, monthly = FALSE)
     }
 
   # Restore units
-  out <- restore_units(out, clim)
+  out <- restore_units(out, clim$mean)
 
   return(out)
 }

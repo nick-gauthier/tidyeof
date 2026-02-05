@@ -34,7 +34,7 @@ new_patterns(
 
 \item{rotation}{Rotation matrix if varimax was applied (or NULL)}
 
-\item{climatology}{Stars object with climatology}
+\item{climatology}{List with `mean` and `sd` stars objects (from get_climatology)}
 
 \item{units}{List of original data units}
 

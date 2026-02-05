@@ -9,7 +9,7 @@
 #' @param k Number of components retained
 #' @param proj_matrix Projection matrix for new data
 #' @param rotation Rotation matrix if varimax was applied (or NULL)
-#' @param climatology Stars object with climatology
+#' @param climatology List with `mean` and `sd` stars objects (from get_climatology)
 #' @param units List of original data units
 #' @param names Variable names
 #' @param scaled Logical, whether data was scaled

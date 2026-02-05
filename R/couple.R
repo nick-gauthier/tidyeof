@@ -162,7 +162,6 @@ validate_patterns_compatibility <- function(predictor_patterns, response_pattern
 #' @param newdata New predictor data (stars object) for making predictions
 #' @param k Number of CCA modes to use for prediction. If NULL, uses all available modes
 #' @param reconstruct Logical, whether to reconstruct the full spatial field (default: TRUE)
-#' @param nonneg How to handle non-negative constraints: "auto", TRUE, FALSE, or "inherit"
 #' @param predictor_patterns Optional patterns object to use instead of the one stored
 #'   in the coupled object. Useful for cross-source prediction with common EOFs: the
 #'   override patterns share the same EOF space but carry a different climatology.
@@ -190,7 +189,7 @@ validate_patterns_compatibility <- function(predictor_patterns, response_pattern
 #' predict(coupled, phyda_new, predictor_patterns = cpat$phyda)
 #' }
 predict.coupled_patterns <- function(object, newdata, k = NULL, reconstruct = TRUE,
-                                   nonneg = "auto", predictor_patterns = NULL, ...) {
+                                   predictor_patterns = NULL, ...) {
 
   # Validate inputs
   if (!inherits(object, "coupled_patterns")) {
@@ -245,8 +244,7 @@ predict.coupled_patterns <- function(object, newdata, k = NULL, reconstruct = TR
   # Reconstruct spatial field
   reconstructed <- reconstruct(
     target_patterns = object$response_patterns,
-    amplitudes = predicted_amplitudes,
-    nonneg = nonneg
+    amplitudes = predicted_amplitudes
   )
 
   return(reconstructed)

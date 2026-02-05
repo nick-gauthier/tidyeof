@@ -10,8 +10,7 @@ tune_cca(
   k_resp = 1:10,
   k_cca = NULL,
   metrics = c("rmse", "cor_spatial", "cor_temporal"),
-  parallel = FALSE,
-  nonneg = "auto"
+  parallel = FALSE
 )
 }
 \arguments{
@@ -29,8 +28,6 @@ the maximum can act as regularization.}
 "rmse", "cor_spatial", "cor_temporal" (default: all three)}
 
 \item{parallel}{Logical, whether to use furrr for parallel execution (default FALSE)}
-
-\item{nonneg}{Non-negativity constraint for reconstruction: "auto", TRUE, or FALSE}
 }
 \value{
 A tibble with columns: k_pred, k_resp, k_cca, fold, and one column

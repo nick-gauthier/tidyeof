@@ -12,8 +12,7 @@ tune_eof(
   metrics = c("rmse", "cor_spatial", "cor_temporal"),
   scale = FALSE,
   monthly = FALSE,
-  weight = TRUE,
-  nonneg = "auto"
+  weight = TRUE
 )
 }
 \arguments{
@@ -33,8 +32,6 @@ tune_eof(
 \item{monthly}{Logical, whether to compute monthly climatology (default FALSE)}
 
 \item{weight}{Logical, whether to apply area weighting (default TRUE)}
-
-\item{nonneg}{Non-negativity constraint for reconstruction: "auto", TRUE, or FALSE}
 }
 \value{
 A tibble with columns: k, fold, and one column per metric.

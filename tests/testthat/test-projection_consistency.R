@@ -55,11 +55,11 @@ test_that("reconstruct with amplitudes matches reconstruct with stars input", {
   pat <- patterns(prism, k = 5, scale = TRUE)
 
   # Reconstruct using stored amplitudes
-  rec_stored <- reconstruct(pat, nonneg = FALSE)
+  rec_stored <- reconstruct(pat)
 
   # Reconstruct by projecting original data
 
-  rec_projected <- reconstruct(pat, prism, nonneg = FALSE)
+  rec_projected <- reconstruct(pat, prism)
 
   # Should be identical
 
@@ -72,8 +72,8 @@ test_that("reconstruct consistent after subsetting", {
   for (i in 1:5) {
     pat_sub <- pat[1:i]
 
-    rec_stored <- reconstruct(pat_sub, nonneg = FALSE)
-    rec_projected <- reconstruct(pat_sub, prism, nonneg = FALSE)
+    rec_stored <- reconstruct(pat_sub)
+    rec_projected <- reconstruct(pat_sub, prism)
 
     # Need to align dimensions for comparison
     rec_projected <- rec_projected %>%

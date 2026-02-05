@@ -9,7 +9,6 @@
   newdata,
   k = NULL,
   reconstruct = TRUE,
-  nonneg = "auto",
   predictor_patterns = NULL,
   ...
 )
@@ -22,8 +21,6 @@
 \item{k}{Number of CCA modes to use for prediction. If NULL, uses all available modes}
 
 \item{reconstruct}{Logical, whether to reconstruct the full spatial field (default: TRUE)}
-
-\item{nonneg}{How to handle non-negative constraints: "auto", TRUE, FALSE, or "inherit"}
 
 \item{predictor_patterns}{Optional patterns object to use instead of the one stored
 in the coupled object. Useful for cross-source prediction with common EOFs: the

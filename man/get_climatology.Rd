@@ -13,11 +13,9 @@ get_climatology(dat, monthly = FALSE)
 computes statistics over the entire period.}
 }
 \value{
-A stars object with:
-  - Original spatial dimensions (x, y)
-  - For monthly climatology: Additional month dimension with values from month.name
-  - Additional statistic dimension containing 'mean' and 'sd' statistics
-  - Original units preserved from input data
+A list with two stars objects:
+  \item{mean}{Climatological mean with original spatial dimensions and units}
+  \item{sd}{Climatological standard deviation with same structure}
 }
 \description{
 Computes climatological statistics (mean and standard deviation) for a spatial field,

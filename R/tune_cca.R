@@ -195,7 +195,6 @@ prep_cv_folds <- function(predictor, response,
 #' @param metrics Character vector of metrics to compute. Options:
 #'   "rmse", "cor_spatial", "cor_temporal" (default: all three)
 #' @param parallel Logical, whether to use furrr for parallel execution (default FALSE)
-#' @param nonneg Non-negativity constraint for reconstruction: "auto", TRUE, or FALSE
 #'
 #' @return A tibble with columns: k_pred, k_resp, k_cca, fold, and one column
 #'   per metric requested.
@@ -221,8 +220,7 @@ tune_cca <- function(cv_folds,
                      k_resp = 1:10,
                      k_cca = NULL,
                      metrics = c("rmse", "cor_spatial", "cor_temporal"),
-                     parallel = FALSE,
-                     nonneg = "auto") {
+                     parallel = FALSE) {
 
   if (!inherits(cv_folds, "cv_folds")) {
     cli::cli_abort("cv_folds must be a cv_folds object from prep_cv_folds()",
@@ -289,8 +287,7 @@ tune_cca <- function(cv_folds,
         k_pred = params$k_pred,
         k_resp = params$k_resp,
         k_cca = params$k_cca,
-        metrics = metrics,
-        nonneg = nonneg
+        metrics = metrics
       )
     })
 
@@ -314,11 +311,10 @@ tune_cca <- function(cv_folds,
 #' @param k_resp Number of response EOFs
 #' @param k_cca Number of CCA modes
 #' @param metrics Metrics to compute
-#' @param nonneg Non-negativity constraint
 #'
 #' @return Tibble with fold_id and metric values
 #' @keywords internal
-evaluate_fold <- function(fold, k_pred, k_resp, k_cca, metrics, nonneg) {
+evaluate_fold <- function(fold, k_pred, k_resp, k_cca, metrics) {
   # Truncate patterns to requested k (cheap operation using [.patterns)
   pred_patterns <- fold$train_pred_patterns[1:k_pred]
   resp_patterns <- fold$train_resp_patterns[1:k_resp]
@@ -327,7 +323,7 @@ evaluate_fold <- function(fold, k_pred, k_resp, k_cca, metrics, nonneg) {
   coupled <- couple(pred_patterns, resp_patterns, k = k_cca, validate = FALSE)
 
   # Predict on test data
-  predicted <- predict(coupled, fold$test_pred_data, nonneg = nonneg)
+  predicted <- predict(coupled, fold$test_pred_data)
 
   # Compute metrics
   metric_values <- compute_spatial_metrics(predicted, fold$test_resp_data, metrics)
@@ -439,7 +435,6 @@ print.cv_folds <- function(x, ...) {
 #' @param scale Logical, whether to scale data before EOF extraction (default FALSE)
 #' @param monthly Logical, whether to compute monthly climatology (default FALSE)
 #' @param weight Logical, whether to apply area weighting (default TRUE)
-#' @param nonneg Non-negativity constraint for reconstruction: "auto", TRUE, or FALSE
 #'
 #' @return A tibble with columns: k, fold, and one column per metric.
 #'
@@ -465,8 +460,7 @@ tune_eof <- function(data,
                      metrics = c("rmse", "cor_spatial", "cor_temporal"),
                      scale = FALSE,
                      monthly = FALSE,
-                     weight = TRUE,
-                     nonneg = "auto") {
+                     weight = TRUE) {
 
   times <- stars::st_get_dimension_values(data, "time")
 
@@ -507,8 +501,7 @@ tune_eof <- function(data,
       evaluate_eof_fold(
         fold = fold,
         k = k_val,
-        metrics = metrics,
-        nonneg = nonneg
+        metrics = metrics
       )
     })
 
@@ -524,18 +517,16 @@ tune_eof <- function(data,
 #' @param fold A fold list containing train_patterns and test_data
 #' @param k Number of EOFs to use
 #' @param metrics Metrics to compute
-#' @param nonneg Non-negativity constraint
 #'
 #' @return Tibble with fold_id and metric values
 #' @keywords internal
-evaluate_eof_fold <- function(fold, k, metrics, nonneg) {
+evaluate_eof_fold <- function(fold, k, metrics) {
   # Truncate patterns to k
   patterns_k <- fold$train_patterns[1:k]
 
   # Project test data and reconstruct
   reconstructed <- reconstruct(patterns_k,
-                                     amplitudes = fold$test_data,
-                                     nonneg = nonneg)
+                                     amplitudes = fold$test_data)
 
   # Compute metrics
   metric_values <- compute_spatial_metrics(reconstructed, fold$test_data, metrics)

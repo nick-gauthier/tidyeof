@@ -123,7 +123,7 @@ test_that("canonical correlation utilities work correctly", {
 
   expect_s3_class(canon_corr, "data.frame")
   expect_equal(nrow(canon_corr), 2)
-  expect_true(all(c("mode", "correlation", "correlation_squared", "variance_explained") %in% names(canon_corr)))
+  expect_true(all(c("mode", "correlation", "correlation_squared") %in% names(canon_corr)))
   expect_true(all(canon_corr$correlation >= -1e-10 & canon_corr$correlation <= 1 + 1e-10))
 
   # Test canonical variables extraction
@@ -181,12 +181,12 @@ test_that("print and summary methods work for coupled_patterns", {
   expect_no_error(print(coupled))
   expect_no_error(summary(coupled))
 
-  # Capture output to check content
-  print_output <- capture.output(print(coupled))
+  # cli writes to message connection, so capture both stdout and stderr
+  print_output <- capture.output(print(coupled), type = "message")
   expect_true(any(grepl("Coupled Patterns Object", print_output)))
   expect_true(any(grepl("Method: cca", print_output)))
 
-  summary_output <- capture.output(summary(coupled))
+  summary_output <- capture.output(summary(coupled), type = "message")
   expect_true(any(grepl("Coupled Patterns Summary", summary_output)))
 })
 

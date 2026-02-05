@@ -4,7 +4,7 @@
 \alias{reconstruct}
 \title{Reconstruct spatial field from EOF amplitudes}
 \usage{
-reconstruct(target_patterns, amplitudes = NULL, nonneg = "auto")
+reconstruct(target_patterns, amplitudes = NULL)
 }
 \arguments{
 \item{target_patterns}{A patterns object containing EOFs and climatology}
@@ -13,12 +13,6 @@ reconstruct(target_patterns, amplitudes = NULL, nonneg = "auto")
 - NULL (default): uses original amplitudes from target_patterns
 - tibble: with time column and PC columns
 - stars object: will be projected onto patterns first}
-
-\item{nonneg}{How to handle non-negative constraint (default: "auto"):
-- "auto": guess based on units (mm, cm, etc.) or variable names containing
-  "precip", "rain", "snow", etc. If neither matches, allows negatives.
-- TRUE: always clamp negative values to zero
-- FALSE: always allow negative values}
 }
 \value{
 A stars object with reconstructed spatial-temporal data
@@ -26,4 +20,10 @@ A stars object with reconstructed spatial-temporal data
 \description{
 Converts PC amplitudes back into a full spatial-temporal field by multiplying
 by the EOF patterns and adding back the climatology.
+}
+\details{
+For bounded variables like precipitation, the reconstructed field may contain
+small negative values due to EOF truncation. To clamp these, use
+`mutate(result, across(everything(), ~pmax(.x, 0 * .x)))` (the `0 * .x`
+trick preserves units).
 }

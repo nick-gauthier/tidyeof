@@ -1,31 +1,3 @@
-#' Detect if variable should be non-negative
-#'
-#' Checks units and variable names to guess whether the data represents
-#' something that can't be negative (like precipitation).
-#'
-#' @param patterns A patterns object
-#' @return Logical indicating if non-negative constraint should apply
-#' @keywords internal
-should_be_nonnegative <- function(patterns) {
-  # First check units - precipitation is typically in mm, cm, or inches
-  if(!is.null(patterns$units)) {
-    for(unit in patterns$units) {
-      if(!is.null(unit)) {
-        unit_str <- as.character(unit$numerator)
-        # Check for length units that typically indicate precipitation/depth
-        if(any(unit_str %in% c("mm", "cm", "m", "in", "inches"))) {
-          return(TRUE)
-        }
-      }
-    }
-  }
-
-  # Fall back to checking variable names
-  precip_patterns <- c("precip", "prec", "prcp", "rain", "snow", "ppt", "rr")
-  var_names <- tolower(patterns$names)
-  return(any(sapply(precip_patterns, function(p) grepl(p, var_names))))
-}
-
 #' Reconstruct spatial field from EOF amplitudes
 #'
 #' Converts PC amplitudes back into a full spatial-temporal field by multiplying
@@ -36,26 +8,20 @@ should_be_nonnegative <- function(patterns) {
 #'   - NULL (default): uses original amplitudes from target_patterns
 #'   - tibble: with time column and PC columns
 #'   - stars object: will be projected onto patterns first
-#' @param nonneg How to handle non-negative constraint (default: "auto"):
-#'   - "auto": guess based on units (mm, cm, etc.) or variable names containing
-#'     "precip", "rain", "snow", etc. If neither matches, allows negatives.
-#'   - TRUE: always clamp negative values to zero
-#'   - FALSE: always allow negative values
+#'
+#' @details
+#' For bounded variables like precipitation, the reconstructed field may contain
+#' small negative values due to EOF truncation. To clamp these, use
+#' `mutate(result, across(everything(), ~pmax(.x, 0 * .x)))` (the `0 * .x`
+#' trick preserves units).
 #'
 #' @return A stars object with reconstructed spatial-temporal data
 #' @export
-reconstruct <- function(target_patterns, amplitudes = NULL, nonneg = "auto") {
+reconstruct <- function(target_patterns, amplitudes = NULL) {
   validate_patterns(target_patterns)
 
   if(is.null(amplitudes)) amplitudes <- target_patterns$amplitudes
   if(inherits(amplitudes, 'stars')) amplitudes <- project_patterns(target_patterns, amplitudes)
-
-  # Auto-detect whether to apply non-negative constraint
-  if(nonneg == "auto") {
-    nonneg <- should_be_nonnegative(target_patterns)
-  }
-  # check (ncol(amplitudes) - 1) == number of PCs in eofs?
-  # check margin 3 is time?
 
   # With Hannachi-style handling we store EOFs in physical units and PCs as
   # unscaled scores, so multiplying amplitudes by EOFs yields anomalies directly
@@ -84,7 +50,7 @@ reconstruct <- function(target_patterns, amplitudes = NULL, nonneg = "auto") {
   anomalies <- matrix_to_spacetime(
     anomalies_valid,
     template_eofs = target_patterns$eofs,
-    spatial_template = target_patterns$climatology,
+    spatial_template = target_patterns$climatology$mean,
     valid_pixels = valid_pixels,
     times = amplitudes$time,
     var_names = target_patterns$names
@@ -94,12 +60,6 @@ reconstruct <- function(target_patterns, amplitudes = NULL, nonneg = "auto") {
                                clim = target_patterns$climatology,
                                scale = target_patterns$scaled,
                                monthly = target_patterns$monthly)
-
-  # Clamp negative values to zero if nonneg is TRUE
-
-  # The `0 * .x` trick preserves units: pmax(.x, 0) would strip units,
-  # but pmax(.x, 0 * .x) keeps them because 0 * .x has the same units as .x
-  if(nonneg) final <- mutate(final, across(everything(), ~pmax(.x, 0 * .x)))
 
   # Restore units for each variable
   if(!is.null(target_patterns$units) && any(!sapply(target_patterns$units, is.null))) {

@@ -4,7 +4,7 @@
 \alias{evaluate_eof_fold}
 \title{Evaluate EOF reconstruction for a single fold}
 \usage{
-evaluate_eof_fold(fold, k, metrics, nonneg)
+evaluate_eof_fold(fold, k, metrics)
 }
 \arguments{
 \item{fold}{A fold list containing train_patterns and test_data}
@@ -12,8 +12,6 @@ evaluate_eof_fold(fold, k, metrics, nonneg)
 \item{k}{Number of EOFs to use}
 
 \item{metrics}{Metrics to compute}
-
-\item{nonneg}{Non-negativity constraint}
 }
 \value{
 Tibble with fold_id and metric values

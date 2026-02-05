@@ -22,10 +22,11 @@ test_that("get_climatology handles basic annual calculations correctly", {
   # Calculate climatology
   result <- get_climatology(test_data, monthly = FALSE)
 
-  # Basic structure tests
-  expect_s3_class(result, "stars")
-  expect_named(st_dimensions(result), c("x", "y", "statistic"))
-  expect_equal(dim(result), c(x = 5, y = 5, statistic = 2))
+  # Basic structure tests — now returns a list
+  expect_type(result, "list")
+  expect_named(result, c("mean", "sd"))
+  expect_s3_class(result$mean, "stars")
+  expect_s3_class(result$sd, "stars")
 
   # Calculate expected values
   manual_mean <- apply(test_array, c(1,2), mean)
@@ -33,13 +34,9 @@ test_that("get_climatology handles basic annual calculations correctly", {
   manual_sd <- apply(test_array, c(1,2), sd)
   names(dim(manual_sd)) <- c('x', 'y')
 
-  # Convert stars objects to arrays for comparison
-  result_mean <- slice(result, "statistic", 1)$t2m
-  result_sd <- slice(result, "statistic", 2)$t2m
-
   # Compare values
-  expect_equal(result_mean, manual_mean, tolerance = 1e-7)
-  expect_equal(result_sd, manual_sd, tolerance = 1e-7)
+  expect_equal(result$mean$t2m, manual_mean, tolerance = 1e-7)
+  expect_equal(result$sd$t2m, manual_sd, tolerance = 1e-7)
 })
 
 test_that("get_climatology handles monthly calculations correctly", {
@@ -48,7 +45,7 @@ test_that("get_climatology handles monthly calculations correctly", {
   x <- seq(0, 1, length.out = 3)
   y <- seq(0, 1, length.out = 3)
 
-  # Create data with constant value per month
+  # Create data where each month has a constant value
   month_values <- 1:12
   test_array <- array(0, c(3, 3, 36))
   for(i in 1:36) {
@@ -65,23 +62,22 @@ test_that("get_climatology handles monthly calculations correctly", {
   result <- get_climatology(test_data, monthly = TRUE)
 
   # Test structure
-  expect_s3_class(result, "stars")
-  expect_named(st_dimensions(result), c("x", "y", "month", "statistic"))
-  expect_equal(dim(result), c(x = 3, y = 3, month = 12, statistic = 2))
+  expect_type(result, "list")
+  expect_named(result, c("mean", "sd"))
+  expect_s3_class(result$mean, "stars")
 
-  # Test values - convert to array for easier checking
-  result_array <- result$t2m
-
-  # For each month
+  # Test values — check mean and sd for each month
   for(i in 1:12) {
     # All grid cells should have value i for mean
     ref <- matrix(c(i, i, i), ncol = 3)
     names(dim(ref)) <- c('x', 'y')
-    expect_equal(unique(result_array[,,i,1]), ref)
+    mean_vals <- result$mean$t2m[,,i]
+    expect_equal(unique(mean_vals), ref)
     # All grid cells should have sd of 0 (constant values)
     ref <- matrix(c(0, 0, 0), ncol = 3)
     names(dim(ref)) <- c('x', 'y')
-    expect_equal(unique(result_array[,,i,2]), ref)
+    sd_vals <- result$sd$t2m[,,i]
+    expect_equal(unique(sd_vals), ref)
   }
 })
 
@@ -103,13 +99,14 @@ test_that("get_climatology preserves units correctly", {
   annual_result <- get_climatology(test_data, monthly = FALSE)
   monthly_result <- get_climatology(test_data, monthly = TRUE)
 
-  # Check units are preserved
-  expect_true(inherits(annual_result[[1]], "units"))
-  expect_true(inherits(monthly_result[[1]], "units"))
+  # Check units are preserved on both mean and sd
+  expect_true(inherits(annual_result$mean[[1]], "units"))
+  expect_true(inherits(annual_result$sd[[1]], "units"))
+  expect_true(inherits(monthly_result$mean[[1]], "units"))
 
-  # Compare unit strings instead of unit objects
-  expect_equal(as.character(units(annual_result[[1]])), "°C")
-  expect_equal(as.character(units(monthly_result[[1]])), "°C")
+  # Compare unit strings
+  expect_equal(as.character(units(annual_result$mean[[1]])), "°C")
+  expect_equal(as.character(units(monthly_result$mean[[1]])), "°C")
 })
 
 test_that("get_climatology handles invalid inputs appropriately", {
@@ -254,8 +251,8 @@ test_that("functions handle incomplete years gracefully", {
                  "Data does not contain complete years")
 
   # Results should still have correct structure
-  expect_equal(dim(clim), c(x = 3, y = 3, month = 12, statistic = 2))
-  #expect_equal(dim(anom), c(x = 3, y = 3, time = 29))
+  expect_type(clim, "list")
+  expect_s3_class(clim$mean, "stars")
 })
 
 test_that("functions handle non-January start dates correctly", {
@@ -278,7 +275,7 @@ test_that("functions handle non-January start dates correctly", {
 
   # Check month ordering
   expected_months <- as.character(unique(lubridate::month(times, label = TRUE, abbr = FALSE)))
-  expect_equal(st_get_dimension_values(clim, "month"), expected_months)
+  expect_equal(st_get_dimension_values(clim$mean, "month"), expected_months)
   expect_equal(expected_months[1], "July")
 
   # Calculate anomalies
@@ -314,13 +311,8 @@ test_that("functions handle partial years correctly with non-standard start", {
 
   # Check month ordering
   expected_months <- as.character(unique(lubridate::month(times, label = TRUE, abbr = FALSE)))
-  expect_equal(st_get_dimension_values(clim, "month"), expected_months)
+  expect_equal(st_get_dimension_values(clim$mean, "month"), expected_months)
   expect_equal(expected_months[1], "October")
-
-  # Test full cycle
-  #expect_warning(anom <- get_anomalies(test_data, monthly = TRUE))
-  #expect_warning(restored <- restore_climatology(anom, clim, monthly = TRUE))
-  #expect_equal(test_data$t2m, restored$t2m, tolerance = 1e-10)
 })
 
 test_that("cycle of operations preserves values for different start months", {
@@ -350,7 +342,7 @@ test_that("cycle of operations preserves values for different start months", {
 
     # Check month ordering in climatology
     expected_months <- as.character(unique(lubridate::month(times, label = TRUE, abbr = FALSE)))
-    expect_equal(st_get_dimension_values(clim, "month"), expected_months)
+    expect_equal(st_get_dimension_values(clim$mean, "month"), expected_months)
     expect_equal(expected_months[1],
                  as.character(month(ymd(paste0("2000-", start_month, "-01")),
                        label = TRUE, abbr = FALSE)))

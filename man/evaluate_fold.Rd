@@ -4,7 +4,7 @@
 \alias{evaluate_fold}
 \title{Evaluate a single fold with given parameters}
 \usage{
-evaluate_fold(fold, k_pred, k_resp, k_cca, metrics, nonneg)
+evaluate_fold(fold, k_pred, k_resp, k_cca, metrics)
 }
 \arguments{
 \item{fold}{A single fold list from cv_folds$folds}
@@ -16,8 +16,6 @@ evaluate_fold(fold, k_pred, k_resp, k_cca, metrics, nonneg)
 \item{k_cca}{Number of CCA modes}
 
 \item{metrics}{Metrics to compute}
-
-\item{nonneg}{Non-negativity constraint}
 }
 \value{
 Tibble with fold_id and metric values
