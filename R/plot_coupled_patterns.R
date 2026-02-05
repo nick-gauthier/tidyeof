@@ -4,15 +4,15 @@
 #' `type = "combined"` mirrors the patterns plotting workflow by displaying the
 #' predictor and response spatial patterns alongside their canonical variate time
 #' series. Additional types include canonical correlation bars, standalone
-#' canonical variate panels, or direct access to the underlying predictor / response
-#' pattern plots.
+#' canonical variate panels, canonical spatial patterns, or direct access to the
+#' underlying predictor / response pattern plots.
 #'
 #' @param x A `coupled_patterns` object.
 #' @param type Plot type: one of `"combined"`, `"correlations"`,
-#'   `"canonical"`, `"predictor"`, or `"response"`.
-#' @param side When `type = "canonical"`, choose canonical variates from the
-#'   predictor side, response side, or both (values: `"predictor"`,
-#'   `"response"`, `"both"`). Ignored for other plot types.
+#'   `"canonical"`, `"canonical_patterns"`, `"predictor"`, or `"response"`.
+#' @param side When `type = "canonical"` or `type = "canonical_patterns"`,
+#'   choose from the predictor side, response side, or both (values:
+#'   `"predictor"`, `"response"`, `"both"`). Ignored for other plot types.
 #' @param data Optional amplitudes or patterns for the canonical variate plots.
 #'   For `side = "both"`, a list with elements `predictor` and `response` may be
 #'   supplied. Defaults to the training patterns stored in `x` when omitted.
@@ -22,11 +22,12 @@
 #' @param ... Additional arguments forwarded to `plot.patterns()` for
 #'   `type = "predictor"` or `type = "response"` calls.
 #'
-#' @return A ggplot object (or a patchwork object when `type = "combined"`).
+#' @return A ggplot object (or a patchwork object when `type = "combined"` or
+#'   `type = "canonical_patterns"` with `side = "both"`).
 #' @export
 plot.coupled_patterns <- function(x,
                                   type = c("combined", "correlations", "canonical",
-                                           "predictor", "response"),
+                                           "canonical_patterns", "predictor", "response"),
                                   side = c("predictor", "response", "both"),
                                   data = NULL,
                                   k = NULL,
@@ -61,6 +62,11 @@ plot.coupled_patterns <- function(x,
   if (type %in% c("predictor", "response")) {
     target <- if (type == "predictor") x$predictor_patterns else x$response_patterns
     return(plot(target, scaled = scaled, ...))
+  }
+
+  if (type == "canonical_patterns") {
+    side <- match.arg(side)
+    return(plot_canonical_patterns(x, side = side, k = k, scaled = scaled))
   }
 
   side <- match.arg(side)
@@ -141,4 +147,73 @@ plot.coupled_patterns <- function(x,
       subtitle = "Top: predictor patterns | middle: response patterns | bottom: canonical variates"
     ) &
     ggplot2::theme(plot.margin = ggplot2::margin(5, 5, 5, 5))
+}
+
+#' Plot canonical spatial patterns
+#'
+#' Internal helper to plot canonical patterns computed from CCA.
+#'
+#' @param x A coupled_patterns object
+#' @param side "predictor", "response", or "both"
+#' @param k Number of modes
+#' @param scaled Whether to scale the patterns
+#'
+#' @return A ggplot or patchwork object
+#' @keywords internal
+plot_canonical_patterns <- function(x, side = "both", k = NULL, scaled = FALSE) {
+  if (is.null(k)) k <- x$k
+
+  make_single_plot <- function(canon_patterns, title_prefix, colour) {
+    # Similar to .plot_eofs_internal but for canonical patterns
+    plot_data <- canon_patterns
+
+    if (scaled) {
+      # Scale each CV to unit variance
+      for (i in seq_len(k)) {
+        cv_name <- paste0("CV", i)
+        vals <- plot_data[[1]][,,i]
+        plot_data[[1]][,,i] <- vals / max(abs(vals), na.rm = TRUE)
+      }
+    }
+
+    ggplot2::ggplot() +
+      stars::geom_stars(data = plot_data) +
+      ggplot2::facet_wrap(~CV) +
+      scico::scale_fill_scico(palette = "vik", midpoint = 0, na.value = "transparent") +
+      ggplot2::coord_sf() +
+      ggplot2::labs(
+        fill = NULL,
+        title = glue::glue("{title_prefix} canonical patterns")
+      ) +
+      ggplot2::theme_void() +
+      ggplot2::theme(
+        strip.text = ggplot2::element_text(size = 10, margin = ggplot2::margin(b = 5)),
+        legend.position = "bottom"
+      )
+  }
+
+  if (side == "both") {
+    pred_patterns <- get_canonical_patterns(x, type = "predictor", k = k)
+    resp_patterns <- get_canonical_patterns(x, type = "response", k = k)
+
+    p_pred <- make_single_plot(pred_patterns, "Predictor", "#4C9F38")
+    p_resp <- make_single_plot(resp_patterns, "Response", "#E17D30")
+
+    if (!requireNamespace("patchwork", quietly = TRUE)) {
+      warning("patchwork needed for side='both'. Install with: install.packages('patchwork')")
+      return(list(predictor = p_pred, response = p_resp))
+    }
+
+    return(
+      (p_pred / p_resp) +
+        patchwork::plot_annotation(
+          title = glue::glue("Canonical spatial patterns (k = {k})")
+        )
+    )
+  }
+
+  # Single side
+  canon_patterns <- get_canonical_patterns(x, type = side, k = k)
+  title_prefix <- stringr::str_to_title(side)
+  make_single_plot(canon_patterns, title_prefix, if (side == "predictor") "#4C9F38" else "#E17D30")
 }
