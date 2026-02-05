@@ -4,7 +4,15 @@
 \alias{predict.coupled_patterns}
 \title{Predict Method for Coupled Patterns}
 \usage{
-\method{predict}{coupled_patterns}(object, newdata, k = NULL, reconstruct = TRUE, nonneg = "auto", ...)
+\method{predict}{coupled_patterns}(
+  object,
+  newdata,
+  k = NULL,
+  reconstruct = TRUE,
+  nonneg = "auto",
+  predictor_patterns = NULL,
+  ...
+)
 }
 \arguments{
 \item{object}{A coupled_patterns object from couple()}
@@ -16,6 +24,10 @@
 \item{reconstruct}{Logical, whether to reconstruct the full spatial field (default: TRUE)}
 
 \item{nonneg}{How to handle non-negative constraints: "auto", TRUE, FALSE, or "inherit"}
+
+\item{predictor_patterns}{Optional patterns object to use instead of the one stored
+in the coupled object. Useful for cross-source prediction with common EOFs: the
+override patterns share the same EOF space but carry a different climatology.}
 
 \item{...}{Additional arguments (currently unused)}
 }
@@ -37,5 +49,10 @@ predictions <- predict(coupled, new_predictor_data)
 
 # Just get predicted amplitudes without spatial reconstruction
 amplitudes <- predict(coupled, new_predictor_data, reconstruct = FALSE)
+
+# Cross-source prediction with common EOFs
+cpat <- common_patterns(list(era = era, phyda = phyda), k = 5)
+coupled <- couple(cpat$era, fine_patterns, k = 3)
+predict(coupled, phyda_new, predictor_patterns = cpat$phyda)
 }
 }

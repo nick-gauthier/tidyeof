@@ -13,6 +13,10 @@
 #' @param rotate Logical, whether to apply varimax rotation (default FALSE)
 #' @param monthly Logical, whether to compute monthly climatology (default FALSE)
 #' @param weight Logical, whether to apply area weighting (default TRUE)
+#' @param common_with Optional named list of additional stars objects to include in
+#'   common EOF computation via [common_patterns()]. When provided, predictor patterns
+#'   are computed jointly with these datasets. The primary predictor is included under
+#'   the name `.primary`. Test times are excluded from all datasets to prevent leakage.
 #'
 #' @return A cv_folds S3 object containing:
 #'   \item{folds}{List of fold data, each containing train patterns and test data}
@@ -21,16 +25,22 @@
 #'   \item{kfolds}{Number of folds}
 #'   \item{common_times}{Vector of overlapping time steps}
 #'   \item{pattern_opts}{List of pattern extraction options}
+#'   \item{common_with_sources}{Names of common EOF sources (if used)}
 #'
 #' @export
 #'
 #' @examples
 #' \dontrun{
-#' # Prepare folds (expensive, run once)
+#' # Standard folds
 #' cv <- prep_cv_folds(coarse_data, fine_data,
 #'                     kfolds = 5, max_k_pred = 10, max_k_resp = 10)
 #'
-#' # Then tune over k_pred and k_resp
+#' # With common EOFs from additional sources
+#' cv <- prep_cv_folds(coarse_data, fine_data,
+#'                     common_with = list(phyda = phyda_coarse),
+#'                     kfolds = 5, max_k_pred = 10, max_k_resp = 10)
+#'
+#' # Then tune over k_pred and k_resp (unchanged)
 #' results <- tune_cca(cv, k_pred = 1:10, k_resp = 1:10)
 #' }
 prep_cv_folds <- function(predictor, response,
@@ -40,12 +50,29 @@ prep_cv_folds <- function(predictor, response,
                           scale = FALSE,
                           rotate = FALSE,
                           monthly = FALSE,
-                          weight = TRUE) {
+                          weight = TRUE,
+                          common_with = NULL) {
   if (isTRUE(rotate)) {
     cli::cli_abort(
       "rotate = TRUE is not supported in cross-validation. Rotation depends on k, so truncating max-k patterns invalidates the rotated basis.",
       class = "tidyeof_invalid_option"
     )
+  }
+
+  # Validate common_with if provided
+  if (!is.null(common_with)) {
+    if (!is.list(common_with) || is.null(names(common_with)) || any(names(common_with) == "")) {
+      cli::cli_abort(
+        "{.arg common_with} must be a named list of {.cls stars} objects.",
+        class = "tidyeof_invalid_input"
+      )
+    }
+    if (".primary" %in% names(common_with)) {
+      cli::cli_abort(
+        "The name {.val .primary} is reserved. Please use a different name for your {.arg common_with} sources.",
+        class = "tidyeof_invalid_input"
+      )
+    }
   }
 
   # Find common times between predictor and response
@@ -70,7 +97,7 @@ prep_cv_folds <- function(predictor, response,
   # Create fold assignments
   fold_times <- prep_folds(common_times, kfolds = kfolds)
 
-  cli::cli_progress_step("Computing patterns for {kfolds} folds")
+  cli::cli_progress_step("Computing patterns for {kfolds} folds{if (!is.null(common_with)) ' (with common EOFs)' else ''}")
 
   # Build each fold
   folds <- purrr::imap(fold_times, function(test_times, fold_id) {
@@ -82,10 +109,30 @@ prep_cv_folds <- function(predictor, response,
     test_pred <- dplyr::filter(predictor, time %in% test_times)
     test_resp <- dplyr::filter(response, time %in% test_times)
 
-    # Compute patterns at max_k (expensive, but only done once per fold)
-    train_pred_patterns <- patterns(train_pred, k = max_k_pred,
-                                        scale = scale, rotate = rotate,
-                                        monthly = monthly, weight = weight)
+    # Compute predictor patterns - with or without common EOFs
+    if (!is.null(common_with)) {
+      # Filter common_with datasets to exclude test times (prevent leakage)
+      common_train <- purrr::map(common_with, function(cw) {
+        cw_times <- stars::st_get_dimension_values(cw, "time")
+        if (any(cw_times %in% test_times)) {
+          dplyr::filter(cw, !(time %in% test_times))
+        } else {
+          cw
+        }
+      })
+
+      cpat <- common_patterns(
+        c(list(.primary = train_pred), common_train),
+        k = max_k_pred, scale = scale, rotate = rotate,
+        monthly = monthly, weight = weight
+      )
+      train_pred_patterns <- cpat$.primary
+    } else {
+      train_pred_patterns <- patterns(train_pred, k = max_k_pred,
+                                          scale = scale, rotate = rotate,
+                                          monthly = monthly, weight = weight)
+    }
+
     train_resp_patterns <- patterns(train_resp, k = max_k_resp,
                                         scale = scale, rotate = rotate,
                                         monthly = monthly, weight = weight)
@@ -112,7 +159,8 @@ prep_cv_folds <- function(predictor, response,
       rotate = rotate,
       monthly = monthly,
       weight = weight
-    )
+    ),
+    common_with_sources = if (!is.null(common_with)) names(common_with) else NULL
   )
 
   class(result) <- "cv_folds"
@@ -347,6 +395,10 @@ print.cv_folds <- function(x, ...) {
   cli::cli_text("Common time steps: {.field {length(x$common_times)}}")
   cli::cli_text("Max predictor EOFs: {.field {x$max_k_pred}}")
   cli::cli_text("Max response EOFs: {.field {x$max_k_resp}}")
+
+  if (!is.null(x$common_with_sources)) {
+    cli::cli_text("Common EOF sources: {.val {x$common_with_sources}}")
+  }
 
   cli::cli_h2("Pattern Options")
   cli::cli_text("Scale: {.field {x$pattern_opts$scale}}")

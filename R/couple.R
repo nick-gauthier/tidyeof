@@ -204,6 +204,9 @@ validate_patterns_compatibility <- function(predictor_patterns, response_pattern
 #' @param k Number of CCA modes to use for prediction. If NULL, uses all available modes
 #' @param reconstruct Logical, whether to reconstruct the full spatial field (default: TRUE)
 #' @param nonneg How to handle non-negative constraints: "auto", TRUE, FALSE, or "inherit"
+#' @param predictor_patterns Optional patterns object to use instead of the one stored
+#'   in the coupled object. Useful for cross-source prediction with common EOFs: the
+#'   override patterns share the same EOF space but carry a different climatology.
 #' @param ... Additional arguments (currently unused)
 #'
 #' @return If reconstruct=TRUE, returns a stars object with reconstructed spatial fields.
@@ -221,9 +224,14 @@ validate_patterns_compatibility <- function(predictor_patterns, response_pattern
 #'
 #' # Just get predicted amplitudes without spatial reconstruction
 #' amplitudes <- predict(coupled, new_predictor_data, reconstruct = FALSE)
+#'
+#' # Cross-source prediction with common EOFs
+#' cpat <- common_patterns(list(era = era, phyda = phyda), k = 5)
+#' coupled <- couple(cpat$era, fine_patterns, k = 3)
+#' predict(coupled, phyda_new, predictor_patterns = cpat$phyda)
 #' }
 predict.coupled_patterns <- function(object, newdata, k = NULL, reconstruct = TRUE,
-                                   nonneg = "auto", ...) {
+                                   nonneg = "auto", predictor_patterns = NULL, ...) {
 
   # Validate inputs
   if (!inherits(object, "coupled_patterns")) {
@@ -247,8 +255,22 @@ predict.coupled_patterns <- function(object, newdata, k = NULL, reconstruct = TR
     k <- object$k
   }
 
+  # Use override patterns if provided, otherwise use stored patterns
+  proj_patterns <- predictor_patterns %||% object$predictor_patterns
+
+  # Validate compatibility if overriding
+  if (!is.null(predictor_patterns)) {
+    if (!identical(dim(predictor_patterns$proj_matrix),
+                   dim(object$predictor_patterns$proj_matrix))) {
+      cli::cli_abort(
+        "{.arg predictor_patterns} must share the same EOF space as the training predictor patterns.",
+        class = "tidyeof_incompatible_patterns"
+      )
+    }
+  }
+
   # Project new data onto predictor patterns to get PC amplitudes
-  new_amplitudes <- project_patterns(object$predictor_patterns, newdata)
+  new_amplitudes <- project_patterns(proj_patterns, newdata)
 
   # Apply CCA transformation
   predicted_amplitudes <- apply_cca_prediction(

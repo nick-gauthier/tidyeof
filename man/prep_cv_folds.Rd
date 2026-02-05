@@ -13,7 +13,8 @@ prep_cv_folds(
   scale = FALSE,
   rotate = FALSE,
   monthly = FALSE,
-  weight = TRUE
+  weight = TRUE,
+  common_with = NULL
 )
 }
 \arguments{
@@ -34,6 +35,11 @@ prep_cv_folds(
 \item{monthly}{Logical, whether to compute monthly climatology (default FALSE)}
 
 \item{weight}{Logical, whether to apply area weighting (default TRUE)}
+
+\item{common_with}{Optional named list of additional stars objects to include in
+common EOF computation via [common_patterns()]. When provided, predictor patterns
+are computed jointly with these datasets. The primary predictor is included under
+the name `.primary`. Test times are excluded from all datasets to prevent leakage.}
 }
 \value{
 A cv_folds S3 object containing:
@@ -43,6 +49,7 @@ A cv_folds S3 object containing:
   \item{kfolds}{Number of folds}
   \item{common_times}{Vector of overlapping time steps}
   \item{pattern_opts}{List of pattern extraction options}
+  \item{common_with_sources}{Names of common EOF sources (if used)}
 }
 \description{
 Computes EOF patterns at maximum k once per fold, enabling cheap truncation
@@ -51,11 +58,16 @@ during grid search. This is the expensive step - call it once, then use
 }
 \examples{
 \dontrun{
-# Prepare folds (expensive, run once)
+# Standard folds
 cv <- prep_cv_folds(coarse_data, fine_data,
                     kfolds = 5, max_k_pred = 10, max_k_resp = 10)
 
-# Then tune over k_pred and k_resp
+# With common EOFs from additional sources
+cv <- prep_cv_folds(coarse_data, fine_data,
+                    common_with = list(phyda = phyda_coarse),
+                    kfolds = 5, max_k_pred = 10, max_k_resp = 10)
+
+# Then tune over k_pred and k_resp (unchanged)
 results <- tune_cca(cv, k_pred = 1:10, k_resp = 1:10)
 }
 }
