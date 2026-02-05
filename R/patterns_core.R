@@ -78,7 +78,6 @@ get_patterns <- function(dat, k = 4, scale = FALSE, rotate = FALSE, monthly = FA
     eofs = eofs$spatial_patterns,
     amplitudes = eofs$amplitudes,
     climatology = climatology,
-    pca = eofs$pca,
     eigenvalues = eofs$eigenvalues,
     rotation = eofs$rotation_matrix,
     units = original_units,
@@ -88,7 +87,10 @@ get_patterns <- function(dat, k = 4, scale = FALSE, rotate = FALSE, monthly = FA
     rotate = rotate,
     k = k,
     weight = weight,
-    valid_pixels = eofs$valid_pixels
+    valid_pixels = eofs$valid_pixels,
+    proj_matrix = eofs$proj_matrix,
+    center = eofs$center,
+    scale = eofs$scale
   )
 
   # Align patterns so EOFs have roughly similar dominant signs
@@ -264,12 +266,16 @@ get_eofs <- function(dat, k, rotate = FALSE, irlba_threshold, weights = NULL) {
   list(
     spatial_patterns = spatial_patterns,
     amplitudes = amplitudes,
-    pca = pca_result,
     eigenvalues = eigenvalues,
     rotation_matrix = rotation_matrix,
     valid_pixels = valid_pixels,
     spatial_dims = flattened$spatial_dims,
-    spatial_shape = flattened$spatial_shape
+    spatial_shape = flattened$spatial_shape,
+    # proj_matrix: weighted loadings with rotation applied, ready for projection
+    proj_matrix = loadings_weighted,
+    # Extract only what's needed from PCA for projection
+    center = pca_result$center,
+    scale = pca_result$scale
   )
 }
 

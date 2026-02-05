@@ -48,6 +48,10 @@ print.patterns <- function(x, ...) {
     x$rotation <- x$rotation[, i, drop = FALSE]
   }
 
+  if (!is.null(x$proj_matrix)) {
+    x$proj_matrix <- x$proj_matrix[, i, drop = FALSE]
+  }
+
   # Eigenvalues stay the same but we update k
   x
 }

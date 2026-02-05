@@ -72,8 +72,17 @@ project_patterns <- function(patterns, newdata) {
     cli::cli_abort("No complete time steps available after removing missing values in `newdata`.")
   }
 
+  # Require proj_matrix (created by get_patterns)
+ if (is.null(patterns$proj_matrix)) {
+    cli::cli_abort(c(
+      "Patterns object is missing {.field proj_matrix}.",
+      "i" = "This patterns object may have been created with an older version of tidyEOF.",
+      "i" = "Please regenerate it using {.fn get_patterns}."
+    ))
+  }
+
   # Check dimension compatibility
-  expected_cols <- nrow(patterns$pca$rotation)
+  expected_cols <- nrow(patterns$proj_matrix)
   if (ncol(data_matrix) != expected_cols) {
     cli::cli_abort(c(
       "Spatial dimension mismatch between patterns and newdata.",
@@ -82,29 +91,21 @@ project_patterns <- function(patterns, newdata) {
     ))
   }
 
-  # Manual projection instead of predict.prcomp (more robust with IRLBA)
   # Center the data using training means
-  if (!identical(patterns$pca$center, FALSE) && !is.null(patterns$pca$center)) {
-    data_matrix <- sweep(data_matrix, 2, patterns$pca$center, "-")
+  if (!identical(patterns$center, FALSE) && !is.null(patterns$center)) {
+    data_matrix <- sweep(data_matrix, 2, patterns$center, "-")
   }
 
   # Scale if PCA was fit with scaling
-
-  if (!identical(patterns$pca$scale, FALSE) && !is.null(patterns$pca$scale)) {
-    data_matrix <- sweep(data_matrix, 2, patterns$pca$scale, "/")
+  if (!identical(patterns$scale, FALSE) && !is.null(patterns$scale)) {
+    data_matrix <- sweep(data_matrix, 2, patterns$scale, "/")
   }
 
-  # Project onto rotation matrix (loadings)
-  # rotation has shape (n_pixels x n_components)
+  # Direct projection using pre-composed matrix
+  # proj_matrix has shape (n_pixels x n_components), already includes rotation + flips
   # data_matrix has shape (n_times x n_pixels)
   # result has shape (n_times x n_components)
-  n_components <- min(patterns$k, ncol(patterns$pca$rotation))
-  projected <- data_matrix %*% patterns$pca$rotation[, 1:n_components, drop = FALSE]
-
-  # Apply rotation if present
-  if (is.matrix(patterns$rotation)) {
-    projected <- projected %*% patterns$rotation
-  }
+  projected <- data_matrix %*% patterns$proj_matrix
 
   # Convert to tibble with proper names
   result <- projected %>%

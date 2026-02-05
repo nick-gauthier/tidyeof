@@ -31,15 +31,9 @@ flip_patterns <- function(patterns) {
     sweep(MARGIN = 2, STATS = sums, FUN = '*') %>%
     bind_cols(time = patterns$amplitudes$time, .)
 
-  # Also flip pca$rotation so project_patterns gives consistent signs
-  if (!is.null(patterns$pca$rotation)) {
-    n_flip <- min(length(sums), ncol(patterns$pca$rotation))
-    patterns$pca$rotation[, 1:n_flip] <- sweep(
-      patterns$pca$rotation[, 1:n_flip, drop = FALSE],
-      MARGIN = 2,
-      STATS = sums[1:n_flip],
-      FUN = '*'
-    )
+  # Flip proj_matrix so project_patterns gives consistent signs
+  if (!is.null(patterns$proj_matrix)) {
+    patterns$proj_matrix <- sweep(patterns$proj_matrix, 2, sums, `*`)
   }
 
   return(patterns)
