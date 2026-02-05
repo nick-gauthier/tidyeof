@@ -1,4 +1,4 @@
-prism <- system.file('testdata/prism_test.RDS', package = 'tidyEOF') %>%
+prism <- system.file('testdata/prism_test.RDS', package = 'tidyeof') %>%
   readRDS()
 prism_coarse <- prism %>% st_warp(cellsize = 0.5, method = 'average', use_gdal = TRUE, no_data_value = -99999) %>%
   setNames(names(prism)) %>%

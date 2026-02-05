@@ -1,4 +1,4 @@
-prism <- system.file('testdata/prism_test.RDS', package = 'tidyEOF') %>%
+prism <- system.file('testdata/prism_test.RDS', package = 'tidyeof') %>%
   readRDS()
 
 test_that("get_pcs() runs", {
