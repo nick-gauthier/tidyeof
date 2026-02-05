@@ -10,8 +10,6 @@ new_patterns(
   eigenvalues,
   k,
   proj_matrix,
-  center = FALSE,
-  scale = FALSE,
   rotation = NULL,
   climatology = NULL,
   units = NULL,
@@ -33,10 +31,6 @@ new_patterns(
 \item{k}{Number of components retained}
 
 \item{proj_matrix}{Projection matrix for new data}
-
-\item{center}{Centering values from PCA (or FALSE)}
-
-\item{scale}{Scaling values from PCA (or FALSE)}
 
 \item{rotation}{Rotation matrix if varimax was applied (or NULL)}
 

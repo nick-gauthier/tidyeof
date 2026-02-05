@@ -3,6 +3,8 @@
 #' @param x A patterns object from patterns()
 #' @param k Optional number of components to highlight with vertical line
 #' @param kmax Maximum number of components to show (default 10)
+#' @param rule_n Logical, whether to show the modified Rule N significance
+#'   cutoff as a dashed blue line (default FALSE)
 #' @param ... Additional arguments (currently unused)
 #' @return A ggplot object
 #' @export
@@ -11,8 +13,12 @@
 #' pat <- patterns(data, k = 5)
 #' screeplot(pat)
 #' screeplot(pat, k = 3, kmax = 8)
+#' screeplot(pat, rule_n = TRUE)  # show significance cutoff
 #' }
-screeplot.patterns <- function(x, k = NULL, kmax = 10, ...) {
+screeplot.patterns <- function(x, k = NULL, kmax = 10, rule_n = FALSE, ...) {
+  # Compute Rule N cutoff if requested
+  rule_n_k <- if (rule_n) rule_n_cutoff(x) else NULL
+
   x$eigenvalues %>%
     dplyr::mutate(separated = if_else(is.na(lag(low)), TRUE, hi < lag(low)),
            multiplet = as.factor(cumsum(separated))) %>%
@@ -23,6 +29,7 @@ screeplot.patterns <- function(x, k = NULL, kmax = 10, ...) {
     ggplot2::geom_text(aes(x = PC, y = cumvar_line, label = glue::glue("{round(cumulative, 0)}%")), size = 2.5, vjust = 0) +
     ggplot2::labs(x = "Principal Component", y = "Normalized Eigenvalue") +
     { if (!is.null(k)) ggplot2::geom_vline(xintercept = k + .5, linetype = 2, color = 'red', alpha = .7) } +
+    { if (!is.null(rule_n_k) && rule_n_k > 0) ggplot2::geom_vline(xintercept = rule_n_k + .5, linetype = 2, color = 'blue', alpha = .7) } +
     ggplot2::theme_bw() +
     ggplot2::guides(color = 'none') +
     ggplot2::scale_x_continuous(breaks = seq(0, 25, 5)) +

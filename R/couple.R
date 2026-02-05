@@ -42,18 +42,8 @@ couple <- function(predictor_patterns, response_patterns, k = NULL,
   common_times <- if (validate) {
     validate_patterns_compatibility(predictor_patterns, response_patterns)
   } else {
-    # If not validating, still need to find common times
-    pred_times <- if ('patterns' %in% class(predictor_patterns)) {
-      predictor_patterns$amplitudes$time
-    } else {
-      predictor_patterns$time
-    }
-    resp_times <- if ('patterns' %in% class(response_patterns)) {
-      response_patterns$amplitudes$time
-    } else {
-      response_patterns$time
-    }
-    # Preserve Date/POSIXct class
+    pred_times <- get_times(predictor_patterns)
+    resp_times <- get_times(response_patterns)
     pred_times[pred_times %in% resp_times]
   }
 
@@ -67,8 +57,8 @@ couple <- function(predictor_patterns, response_patterns, k = NULL,
   resp_amps <- extract_amplitudes_matrix(response_patterns, common_times)
 
   # Notify user if filtering occurred
-  pred_n <- if ('patterns' %in% class(predictor_patterns)) nrow(predictor_patterns$amplitudes) else nrow(predictor_patterns)
-  resp_n <- if ('patterns' %in% class(response_patterns)) nrow(response_patterns$amplitudes) else nrow(response_patterns)
+  pred_n <- length(get_times(predictor_patterns))
+  resp_n <- length(get_times(response_patterns))
 
   if (length(common_times) < pred_n || length(common_times) < resp_n) {
     cli::cli_inform("Filtered to {length(common_times)} common time steps (predictor had {pred_n}, response had {resp_n}).")
@@ -131,51 +121,20 @@ summary.coupled_patterns <- function(object, ...) {
   invisible(object)
 }
 
-# Helper function to extract amplitude matrices from patterns objects
-extract_amplitudes_matrix <- function(patterns, times = NULL) {
-  if ('patterns' %in% class(patterns)) {
-    amps <- patterns$amplitudes
-  } else {
-    amps <- patterns
-  }
-
-  # Filter to specified times if provided
-  if (!is.null(times)) {
-    # Use semi_join for robust time matching (handles Date/POSIXct better than %in%)
-    times_df <- tibble::tibble(time = times)
-    amps <- dplyr::semi_join(amps, times_df, by = "time")
-  }
-
-  amps %>%
-    dplyr::select(-time) %>%
-    as.matrix()
-}
-
 # Helper function to validate pattern compatibility and return common times
 validate_patterns_compatibility <- function(predictor_patterns, response_patterns) {
-  # Check that both are patterns objects or compatible
-  if (!('patterns' %in% class(predictor_patterns)) && !is.data.frame(predictor_patterns)) {
+  if (!inherits(predictor_patterns, "patterns") && !is.data.frame(predictor_patterns)) {
     cli::cli_abort("predictor_patterns must be a patterns object or data frame with amplitudes",
                    class = "tidyeof_invalid_input")
   }
 
-  if (!('patterns' %in% class(response_patterns)) && !is.data.frame(response_patterns)) {
+  if (!inherits(response_patterns, "patterns") && !is.data.frame(response_patterns)) {
     cli::cli_abort("response_patterns must be a patterns object or data frame with amplitudes",
                    class = "tidyeof_invalid_input")
   }
 
-  # Get time vectors
-  pred_times <- if ('patterns' %in% class(predictor_patterns)) {
-    predictor_patterns$amplitudes$time
-  } else {
-    predictor_patterns$time
-  }
-
-  resp_times <- if ('patterns' %in% class(response_patterns)) {
-    response_patterns$amplitudes$time
-  } else {
-    response_patterns$time
-  }
+  pred_times <- get_times(predictor_patterns)
+  resp_times <- get_times(response_patterns)
 
   # Use match-based intersection to preserve Date/POSIXct class
   common_times <- pred_times[pred_times %in% resp_times]
@@ -189,7 +148,6 @@ validate_patterns_compatibility <- function(predictor_patterns, response_pattern
     cli::cli_warn("Only {length(common_times)} common time steps found. Consider using more data.")
   }
 
-  # Return common times for filtering
   common_times
 }
 
@@ -381,13 +339,6 @@ get_canonical_variables <- function(object, data, type = c("predictor", "respons
     k <- object$k
   }
 
-  # Extract amplitudes
-  if ("patterns" %in% class(data)) {
-    amplitudes <- data$amplitudes
-  } else {
-    amplitudes <- data
-  }
-
   # Get transformation coefficients
   if (type == "predictor") {
     coef_matrix <- object$cca$xcoef[, 1:k, drop = FALSE]
@@ -396,10 +347,8 @@ get_canonical_variables <- function(object, data, type = c("predictor", "respons
   }
 
   # Apply transformation
-  times <- amplitudes$time
-  amp_matrix <- amplitudes %>%
-    dplyr::select(-time) %>%
-    as.matrix()
+  times <- get_times(data)
+  amp_matrix <- extract_amplitudes_matrix(data)
 
   # Apply training centering so canonical variables match cancor() inputs
   if (type == "predictor" && !identical(object$cca$xcenter, FALSE)) {

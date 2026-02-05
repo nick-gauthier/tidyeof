@@ -91,16 +91,6 @@ project_patterns <- function(patterns, newdata) {
     ))
   }
 
-  # Center the data using training means
-  if (!identical(patterns$center, FALSE) && !is.null(patterns$center)) {
-    data_matrix <- sweep(data_matrix, 2, patterns$center, "-")
-  }
-
-  # Scale if PCA was fit with scaling
-  if (!identical(patterns$scale, FALSE) && !is.null(patterns$scale)) {
-    data_matrix <- sweep(data_matrix, 2, patterns$scale, "/")
-  }
-
   # Direct projection using pre-composed matrix
   # proj_matrix has shape (n_pixels x n_components), already includes rotation + flips
   # data_matrix has shape (n_times x n_pixels)

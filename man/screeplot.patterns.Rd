@@ -4,7 +4,7 @@
 \alias{screeplot.patterns}
 \title{Scree plot for EOF patterns}
 \usage{
-\method{screeplot}{patterns}(x, k = NULL, kmax = 10, ...)
+\method{screeplot}{patterns}(x, k = NULL, kmax = 10, rule_n = FALSE, ...)
 }
 \arguments{
 \item{x}{A patterns object from patterns()}
@@ -12,6 +12,9 @@
 \item{k}{Optional number of components to highlight with vertical line}
 
 \item{kmax}{Maximum number of components to show (default 10)}
+
+\item{rule_n}{Logical, whether to show the modified Rule N significance
+cutoff as a dashed blue line (default FALSE)}
 
 \item{...}{Additional arguments (currently unused)}
 }
@@ -26,5 +29,6 @@ Scree plot for EOF patterns
 pat <- patterns(data, k = 5)
 screeplot(pat)
 screeplot(pat, k = 3, kmax = 8)
+screeplot(pat, rule_n = TRUE)  # show significance cutoff
 }
 }

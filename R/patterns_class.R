@@ -8,8 +8,6 @@
 #' @param eigenvalues A data.frame/tibble with eigenvalue statistics
 #' @param k Number of components retained
 #' @param proj_matrix Projection matrix for new data
-#' @param center Centering values from PCA (or FALSE)
-#' @param scale Scaling values from PCA (or FALSE)
 #' @param rotation Rotation matrix if varimax was applied (or NULL)
 #' @param climatology Stars object with climatology
 #' @param units List of original data units
@@ -23,10 +21,9 @@
 #' @return A patterns object
 #' @keywords internal
 new_patterns <- function(eofs, amplitudes, eigenvalues, k, proj_matrix,
-                         center = FALSE, scale = FALSE, rotation = NULL,
-                         climatology = NULL, units = NULL, names = NULL,
-                         scaled = FALSE, monthly = FALSE, rotate = FALSE,
-                         weight = TRUE, valid_pixels = NULL) {
+                         rotation = NULL, climatology = NULL, units = NULL,
+                         names = NULL, scaled = FALSE, monthly = FALSE,
+                         rotate = FALSE, weight = TRUE, valid_pixels = NULL) {
   stopifnot(inherits(eofs, "stars"))
   stopifnot(is.data.frame(amplitudes))
   stopifnot(is.data.frame(eigenvalues))
@@ -48,9 +45,7 @@ new_patterns <- function(eofs, amplitudes, eigenvalues, k, proj_matrix,
       k = k,
       weight = weight,
       valid_pixels = valid_pixels,
-      proj_matrix = proj_matrix,
-      center = center,
-      scale = scale
+      proj_matrix = proj_matrix
     ),
     class = "patterns"
   )
@@ -64,7 +59,8 @@ new_patterns <- function(eofs, amplitudes, eigenvalues, k, proj_matrix,
 print.patterns <- function(x, ...) {
   cli::cli_h1("Patterns Object")
   cli::cli_text("Modes: {.field {x$k}}")
-  cli::cli_text("Time steps: {.field {nrow(x$amplitudes)}}")
+  times <- x$amplitudes$time
+  cli::cli_text("Time steps: {.field {length(times)}} ({times[1]} to {times[length(times)]})")
 
   cli::cli_h2("Processing Options")
   cli::cli_text("Scale: {.field {x$scaled}}")
@@ -78,6 +74,58 @@ print.patterns <- function(x, ...) {
   cli::cli_text("{.val {variance_pct}}")
 
   invisible(x)
+}
+
+#' Extract amplitude matrix from a patterns object or data frame
+#'
+#' Provides a unified way to get the numeric amplitude matrix (without the time
+#' column) from either a patterns object or a bare amplitudes data frame. This
+#' is the single dispatch point used throughout the package.
+#'
+#' @param x A patterns object or a data.frame/tibble with a time column
+#' @param ... Additional arguments (currently unused)
+#' @return A numeric matrix with rows = time steps, columns = PCs
+#' @keywords internal
+#' @export
+as.matrix.patterns <- function(x, ...) {
+  x$amplitudes %>%
+    dplyr::select(-time) %>%
+    as.matrix()
+}
+
+#' Extract time vector from a patterns object or data frame
+#'
+#' @param x A patterns object or a data.frame/tibble with a time column
+#' @return A vector of time values
+#' @keywords internal
+get_times <- function(x) {
+  if (inherits(x, "patterns")) {
+    x$amplitudes$time
+  } else {
+    x$time
+  }
+}
+
+#' Extract amplitude matrix from a patterns object or data frame
+#'
+#' Like [as.matrix.patterns()] but also works on bare data frames. Optionally
+#' filters to specified times before extracting.
+#'
+#' @param x A patterns object or a data.frame/tibble with a time column
+#' @param times Optional time vector to filter to before extraction
+#' @return A numeric matrix
+#' @keywords internal
+extract_amplitudes_matrix <- function(x, times = NULL) {
+  amps <- if (inherits(x, "patterns")) x$amplitudes else x
+
+  if (!is.null(times)) {
+    times_df <- tibble::tibble(time = times)
+    amps <- dplyr::semi_join(amps, times_df, by = "time")
+  }
+
+  amps %>%
+    dplyr::select(-time) %>%
+    as.matrix()
 }
 
 #' Extract subset of PCs from a patterns object

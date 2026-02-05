@@ -80,8 +80,6 @@ patterns <- function(dat, k = 4, scale = FALSE, rotate = FALSE, monthly = FALSE,
     eigenvalues = eofs$eigenvalues,
     k = k,
     proj_matrix = eofs$proj_matrix,
-    center = eofs$center,
-    scale = eofs$scale,
     rotation = eofs$rotation_matrix,
     climatology = climatology,
     units = original_units,
@@ -270,10 +268,7 @@ get_eofs <- function(dat, k, rotate = FALSE, irlba_threshold, weights = NULL) {
     spatial_dims = flattened$spatial_dims,
     spatial_shape = flattened$spatial_shape,
     # proj_matrix: weighted loadings with rotation applied, ready for projection
-    proj_matrix = loadings_weighted,
-    # Extract only what's needed from PCA for projection
-    center = pca_result$center,
-    scale = pca_result$scale
+    proj_matrix = loadings_weighted
   )
 }
 
