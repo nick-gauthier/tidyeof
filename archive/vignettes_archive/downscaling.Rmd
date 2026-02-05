@@ -19,7 +19,7 @@ library(gganimate) # animations
 library(remote) # EOT analysis
 ```
 
-Define a study area to constrain all computaitons.
+Define a study area to constrain all computations.
 ```{r}
 bbox_wus <- extent(c(-125, -100, 33, 50))
 bbox_co <- extent(c(-115, -104, 35, 45))

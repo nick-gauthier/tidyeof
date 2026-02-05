@@ -1,0 +1,435 @@
+---
+title: "vignette"
+format: html
+editor: visual
+---
+
+```{r}
+# devtools::document()
+# devtools::build(vignettes = FALSE)
+# install.packages("~/Dropbox (UFL)/Projects/tidyEOF_0.1.0.tar.gz", repos = NULL, type = "source")
+library(tidyEOF)
+library(tidyverse)
+library(stars)
+prism <- system.file('testdata/prism_test.RDS', package = 'tidyEOF') %>%
+  readRDS()
+```
+
+```{r}
+clim <- get_climatology(prism)
+
+clim
+```
+
+```{r}
+ggplot() +
+  geom_stars(data = clim) +
+  scale_fill_viridis_c(option = 'magma') +
+  facet_wrap(~statistic) +
+  coord_quickmap() +
+  theme_minimal()
+```
+
+```{r}
+clim_mon <- get_climatology(prism, monthly = TRUE)
+
+clim_mon
+```
+
+```{r}
+ggplot() +
+  geom_stars(data = clim_mon[,,,,1]) +
+  scale_fill_viridis_c(option = 'magma') +
+  facet_wrap(~month) +
+  coord_quickmap() +
+  theme_minimal()
+
+ggplot() +
+  geom_stars(data = clim_mon[,,,,2]) +
+  scale_fill_viridis_c(option = 'magma') +
+  facet_wrap(~month) +
+  coord_quickmap() +
+  theme_minimal()
+```
+
+```{r}
+get_anomalies(prism, scale = TRUE, monthly = TRUE)
+```
+
+```{r}
+plot_scree(prism)
+plot_scree(prism, scale = TRUE)
+plot_scree(prism, scale = FALSE, monthly = TRUE)
+plot_scree(prism, scale = TRUE, monthly = TRUE)
+```
+
+```{r}
+patterns <- get_patterns(prism, k = 2, monthly = TRUE, scale = FALSE, rotate = FALSE)
+
+plot(patterns)
+plot_eofs(patterns, scaled = TRUE, rawdata = get_anomalies(prism, monthly = TRUE)) # seems wrong, ah, its because of the monthly mean standardization! so this should instead do something with the scaling . . .
+```
+
+```{r}
+patterns
+summary(patterns)
+
+plot(patterns)
+plot(patterns, 'amplitudes')
+plot(patterns, 'scree')
+
+
+get_patterns(prism, k = 2, monthly = FALSE, scale = TRUE) %>%
+  plot()
+get_patterns(prism, k = 2, monthly = FALSE, scale = FALSE) %>%
+  plot()
+
+
+get_patterns(prism, k = 2, monthly = TRUE, scale = TRUE) %>%
+  plot()
+get_patterns(prism, k = 2, monthly = TRUE, scale = FALSE) %>%
+  plot()
+
+get_patterns(prism, k = 2, monthly = FALSE, scale = TRUE, rotate = TRUE) %>%
+  plot()
+get_patterns(prism, k = 2, monthly = FALSE, scale = FALSE, rotate = TRUE) %>%
+  plot()
+
+
+get_patterns(prism, k = 2, monthly = TRUE, scale = TRUE, rotate = TRUE) %>%
+  plot()
+get_patterns(prism, k = 2, monthly = TRUE, scale = FALSE, rotate = TRUE) %>%
+  plot()
+```
+
+```{r}
+plot_amps(patterns)
+plot_amps(patterns, scaled = FALSE)
+```
+
+```{r}
+get_patterns(prism, k = 2, monthly = TRUE, scale = TRUE) %>%
+  plot_amps(scaled = TRUE)
+get_patterns(prism, k = 2, monthly = TRUE, scale = TRUE) %>%
+  plot_amps(scaled = FALSE)
+```
+
+```{r}
+get_patterns(prism, k = 2, monthly = FALSE, scale = TRUE) %>%
+  plot_amps(scaled = TRUE)
+get_patterns(prism, k = 2, monthly = FALSE, scale = TRUE) %>%
+  plot_amps(scaled = FALSE)
+get_patterns(prism, k = 2, monthly = FALSE, scale = FALSE) %>%
+  plot_amps(scaled = TRUE)
+get_patterns(prism, k = 2, monthly = FALSE, scale = FALSE) %>%
+  plot_amps(scaled = FALSE)
+```
+
+and here having monthly TRUE does something to the dimensions! this could be a test
+
+```{r}
+t1 <- get_patterns(filter(prism), scale = FALSE, monthly = FALSE, rotate = FALSE, k =2) %>% reconstruct_field(nonneg = FALSE) 
+
+t2 <- get_patterns(filter(prism), scale = FALSE, monthly = TRUE, rotate = FALSE, k =2) %>% reconstruct_field(nonneg = FALSE) 
+
+t1 - filter(prism)
+t2 - filter(prism)
+stars::st_dimensions(t2)
+stars::st_dimensions(t1)
+
+t1 <- get_anomalies(prism, monthly = FALSE)
+t2 <- get_anomalies(prism, monthly = TRUE)
+library(stars)
+d1 = st_dimensions(t1)
+	d2 = st_dimensions(t2)
+	crs1 = st_crs(d1)
+	crs2 = st_crs(d2)
+	st_crs(d1) = st_crs(NA)
+	st_crs(d2) = st_crs(NA)
+	n = min(length(d1), length(d2))
+	isTRUE(all.equal(d1[1:n], d2[1:n], check.attributes = FALSE)) && crs1 == crs2
+d1$time$values
+d2$time$values
+## get anomalies reshuffles time! it gives it by month rather than by year!!!
+t_order <- d2$time$values %>% order
+t2[,,,t_order] %>% plot
+time(t2) %>% order
+t2 %>% slice(., 'time', order(time(.))) %>% plot
+t2[,,,]
+
+recon_test <- map(1:10, ~get_patterns(filter(prism), scale = TRUE, monthly = TRUE, rotate = TRUE, k =.x) %>% reconstruct_field(nonneg = FALSE) %>% `-`(filter(prism))  %>% stars::st_apply(1:2, function(x) sqrt(mean(x^2)))) %>%
+  append(list(along = 'k')) %>%
+  do.call(c, .)
+  
+  get_patterns(filter(prism), scale = TRUE, monthly = TRUE, k = 4)$climatology %>% filter(month == month.name[1])
+  
+    get_patterns(filter(prism), scale = TRUE, monthly = TRUE, k = 4)$amplitudes$time %>% class
+```
+
+```{r}
+get_climatology(filter(prism), monthly = TRUE)
+
+time_series_redim <- stars::st_dimensions(x = stars::st_dimensions(prism)$x,
+                                           y = stars::st_dimensions(prism)$y,
+                                           year = unique(lubridate::year(time(prism))),
+                                           month = month.name) %>%
+  st_redimension(prism, .)
+```
+
+so this error suggests that something that sweep_months is doing is breaking the output in such a way that later calls to filter are bad
+
+```{r}
+test <- get_patterns(filter(prism), scale = TRUE, monthly = TRUE, k = 4) %>% 
+  reconstruct_field(nonneg = FALSE)
+
+test_clim  <- get_patterns(filter(prism), scale = TRUE, monthly = TRUE, k = 4)$climatology %>% slice('var', 1) %>% units::drop_units()
+
+
+filter(test, lubridate::month(time) == 1)
+filter(prism, lubridate::month(time) == 1)
+st_dimensions(test)$time$values %>% class
+st_dimensions(prism)$time$values %>% class
+
+test - filter(prism)
+test$tmean %>% dim
+
+time(test)
+slice(prism, 'time', 1:2) %>% st_dimensions() %>% .$time %>% .$values
+get_anomalies(prism, scale = TRUE, monthly = TRUE)  %>% st_dimensions() %>% .$time %>% .$values
+# so sweep stars gives you an interval object every time!
+
+filter(prism, lubridate::month(time) == 1) %>% time
+
+get_patterns(filter(prism), scale = FALSE, monthly = TRUE, k = 4) %>% 
+  reconstruct_field(nonneg = FALSE) %>% st_dimensions() %>% .$time %>% .$values
+ 
+sweep_months(test, test_clim, '+')
+
+ purrr::map(1:12, ~ FUN(filter(e1, lubridate::month(time) == .x), abind::adrop(filter(e2, month == month.name[.x])))) %>%
+    do.call(c, .) %>%
+    slice(., 'time', order(time(.)))  
+ 
+ filter(test, lubridate::month(time) == 12)
+ time(test) %>% lubridate::month()
+ abind::adrop(filter(test_clim, month == month.name[1]))
+ 
+ 
+ purrr::map(1:12, ~ `+`(filter(e1, lubridate::month(time) == .x), abind::adrop(filter(e2, month == month.name[.x])))) %>%
+    do.call(c, .) %>%
+    slice(., 'time', order(time(.))) 
+```
+
+```{r}
+recon_test1 <- map(1:20, ~get_patterns(filter(prism), scale = TRUE, monthly = TRUE, rotate = TRUE, k =.x) %>% reconstruct_field(nonneg = FALSE) %>% `-`(filter(prism))  %>% stars::st_apply(1:2, function(x) sqrt(mean(x^2)))) %>%
+  append(list(along = 'k')) %>%
+  do.call(c, .)
+recon_test2 <- map(1:20, ~get_patterns(filter(prism), scale = TRUE, monthly = TRUE, rotate = FALSE, k =.x) %>% reconstruct_field(nonneg = FALSE) %>% `-`(filter(prism))  %>% stars::st_apply(1:2, function(x) sqrt(mean(x^2)))) %>%
+  append(list(along = 'k')) %>%
+  do.call(c, .)
+recon_test3 <- map(1:20, ~get_patterns(filter(prism), scale = TRUE, monthly = FALSE, rotate = FALSE, k =.x) %>% reconstruct_field(nonneg = FALSE) %>% `-`(filter(prism))  %>% stars::st_apply(1:2, function(x) sqrt(mean(x^2)))) %>%
+  append(list(along = 'k')) %>%
+  do.call(c, .)
+recon_test4 <- map(1:20, ~get_patterns(filter(prism), scale = FALSE, monthly = FALSE, rotate = FALSE, k =.x) %>% reconstruct_field(nonneg = FALSE) %>% `-`(filter(prism))  %>% stars::st_apply(1:2, function(x) sqrt(mean(x^2)))) %>%
+  append(list(along = 'k')) %>%
+  do.call(c, .)
+recon_test5 <- map(1:20, ~get_patterns(filter(prism), scale = FALSE, monthly = TRUE, rotate = FALSE, k =.x) %>% reconstruct_field(nonneg = FALSE) %>% `-`(filter(prism))  %>% stars::st_apply(1:2, function(x) sqrt(mean(x^2)))) %>%
+  append(list(along = 'k')) %>%
+  do.call(c, .)
+recon_test6 <- map(1:20, ~get_patterns(filter(prism), scale = FALSE, monthly = TRUE, rotate = TRUE, k =.x) %>% reconstruct_field(nonneg = FALSE) %>% `-`(filter(prism))  %>% stars::st_apply(1:2, function(x) sqrt(mean(x^2)))) %>%
+  append(list(along = 'k')) %>%
+  do.call(c, .)
+recon_test7 <- map(1:20, ~get_patterns(filter(prism), scale = TRUE, monthly = FALSE, rotate = TRUE, k =.x) %>% reconstruct_field(nonneg = FALSE) %>% `-`(filter(prism))  %>% stars::st_apply(1:2, function(x) sqrt(mean(x^2)))) %>%
+  append(list(along = 'k')) %>%
+  do.call(c, .)
+```
+
+```{r}
+ggplot() +
+  geom_stars(data = recon_test) +
+  facet_wrap(~k) +
+  scale_fill_viridis_c() +
+  coord_quickmap()
+```
+
+```{r}
+out <- bind_rows(
+stars::st_apply(recon_test1, 3, mean) %>% as_tibble(),
+stars::st_apply(recon_test2, 3, mean) %>% as_tibble(),
+stars::st_apply(recon_test3, 3, mean) %>% as_tibble(),
+stars::st_apply(recon_test4, 3, mean) %>% as_tibble(),
+stars::st_apply(recon_test5, 3, mean) %>% as_tibble(),
+stars::st_apply(recon_test6, 3, mean) %>% as_tibble(),
+stars::st_apply(recon_test7, 3, mean) %>% as_tibble(), .id = 'rep')
+
+out %>%
+    group_by(rep) %>%
+  summarise(test = min(mean)) %>%
+  arrange(test)
+
+ggplot(out, aes(k, mean, color = rep)) +
+  geom_line()
+
+```
+
+so rotation and stuff is identical, good!
+
+5-6 the best with monthly centering but no scaling
+
+7-3 second with scale true but no monthly
+
+4 basically the same with no scale no monthly
+
+2 and 1 worse with scale true and monthly true -- why is this -- scaling removes variability?
+
+The below errors should be 0 right?? is it because of of scaling amplitudes -- must be right?
+
+still off by machine precision?
+
+```{r}
+get_patterns(filter(prism), monthly = TRUE,  k =36) %>% reconstruct_field(nonneg = FALSE) %>% `-`(filter(prism)) %>% as_tibble() %>% summarise(sqrt(mean(tmean^2)))
+get_patterns(filter(prism), monthly = FALSE,  k =36) %>% reconstruct_field(nonneg = FALSE) %>% `-`(filter(prism)) %>% as_tibble() %>% summarise(sqrt(mean(tmean^2)))
+get_patterns(filter(prism), monthly = TRUE, scale = TRUE, k =36) %>% reconstruct_field(nonneg = FALSE) %>% `-`(filter(prism)) %>% as_tibble() %>% summarise(sqrt(mean(tmean^2)))
+get_patterns(filter(prism), monthly = FALSE, scale = TRUE, k =36) %>% reconstruct_field(nonneg = FALSE) %>% `-`(filter(prism)) %>% as_tibble() %>% summarise(sqrt(mean(tmean^2)))
+```
+
+now do that again with and without the area weight to see if that makes a difference for scale. it seems like there may be a minor impact of this!
+
+```{r}
+get_patterns(filter(prism), k =36) %>% reconstruct_field(nonneg = FALSE) %>% `-`(filter(prism)) %>% as_tibble() %>% summarise(sqrt(mean(tmean^2)))
+get_patterns(filter(prism), scale = TRUE, k =36) %>% reconstruct_field(nonneg = FALSE) %>% `-`(filter(prism)) %>% as_tibble() %>% summarise(sqrt(mean(tmean^2)))
+
+get_patterns(filter(prism), k =36,weight = FALSE) %>% reconstruct_field(nonneg = FALSE) %>% `-`(filter(prism)) %>% as_tibble() %>% summarise(sqrt(mean(tmean^2)))
+get_patterns(filter(prism), scale = TRUE, k =36, weight = FALSE) %>% reconstruct_field(nonneg = FALSE) %>% `-`(filter(prism)) %>% as_tibble() %>% summarise(sqrt(mean(tmean^2)))
+```
+
+```{r}
+get_patterns(filter(prism), k =4) %>% plot_amps() 
+```
+
+```{r}
+get_patterns(filter(prism), k =4, monthly = TRUE) %>% plot_eofs()
+get_patterns(filter(prism), k =4, monthly = FALSE) %>% plot_eofs(scaled = TRUE, prism)
+get_patterns(filter(prism), k =4, monthly = TRUE, scale = TRUE) %>% plot_eofs(scaled = TRUE, prism)
+
+get_patterns(filter(prism), k =4, monthly = TRUE, rotate = TRUE) %>% plot_eofs(scaled = TRUE, prism)
+```
+
+```{r}
+patterns$eofs %>% plot
+```
+
+## Coupled patterns
+
+```{r}
+coarse <- st_bbox(prism) %>%
+  st_as_stars(dx = 0.25) %>%
+  st_warp(prism, ., use_gdal = TRUE, method = 'average') %>%
+  st_set_dimensions('band', names = 'time', values= st_get_dimension_values(prism, 'time')) %>%
+  setNames('tmean') %>%
+  mutate(tmean = units::set_units(tmean, degree_C))
+```
+
+```{r}
+plot(coarse)
+```
+
+```{r}
+get_patterns(coarse, k = 2, monthly = TRUE) %>% plot_eofs
+```
+
+```{r}
+delta_add(prism, prism, monthly = TRUE) %>% plot
+```
+
+Comparing delta to CCA methods
+
+```{r}
+(delta_add(coarse, prism, monthly = TRUE) - filter(prism)) %>%
+  units::drop_units() %>%
+  pull(tmean) %>%
+  `^`(2) %>%
+  mean() %>%
+  sqrt()
+(delta_add(coarse, prism, monthly = FALSE) - (prism)) %>%
+  units::drop_units() %>%
+  pull(tmean) %>%
+  `^`(2) %>%
+  mean() %>%
+  sqrt()
+
+(predict_cca(get_patterns(coarse, k = 5), get_patterns(filter(prism), k = 5), coarse, k = 5) - filter(prism)) %>%
+  units::drop_units() %>%
+  pull(tmean) %>%
+  `^`(2) %>%
+  mean() %>%
+  sqrt()
+
+(predict_cca(get_patterns(coarse, k = 5, monthly = TRUE), get_patterns(filter(prism), k = 5, monthly = TRUE), coarse, k = 5) - filter(prism)) %>%
+  units::drop_units() %>%
+  pull(tmean) %>%
+  `^`(2) %>%
+  mean() %>%
+  sqrt()
+
+(predict_cca(get_patterns(coarse, k = 5, monthly = TRUE, scale = TRUE), get_patterns(filter(prism), k = 5, monthly = TRUE, scale = TRUE), coarse, k = 5) - filter(prism)) %>%
+  units::drop_units() %>%
+  pull(tmean) %>%
+  `^`(2) %>%
+  mean() %>%
+  sqrt()
+
+(predict_cca(get_patterns(coarse, k = 5, monthly = FALSE, scale = TRUE), get_patterns(filter(prism), k = 5, monthly = FALSE, scale = TRUE), coarse, k = 5) - filter(prism)) %>%
+  units::drop_units() %>%
+  pull(tmean) %>%
+  `^`(2) %>%
+  mean() %>%
+  sqrt()
+```
+
+```{r}
+map_dbl(1:36, ~(predict_cca(get_patterns(coarse, k = .x, monthly = TRUE), get_patterns(filter(prism), k = .x, monthly = TRUE), coarse, k = .x) - filter(prism)) %>%
+  units::drop_units() %>%
+  pull(tmean) %>%
+  `^`(2) %>%
+  mean() %>%
+  sqrt())
+```
+
+```{r}
+ggplot() +
+  geom_stars(data = (predict_cca(get_patterns(coarse, k = 5, monthly = TRUE), get_patterns(filter(prism), k = 5, monthly = TRUE), coarse, k = 5) )) +
+  facet_wrap(~time) +
+  coord_quickmap() +
+  scale_fill_viridis_c(option = 'magma')
+
+ggplot() +
+  geom_stars(data = prism) +
+  facet_wrap(~time) +
+  coord_quickmap() +
+  scale_fill_viridis_c(option = 'magma')
+
+ggplot() +
+  geom_stars(data = (predict_cca(get_patterns(coarse, k = 5, monthly = TRUE), get_patterns(filter(prism), k = 5, monthly = TRUE), coarse, k = 5) ) - filter(prism)) +
+  facet_wrap(~time) +
+  coord_quickmap() +
+  scale_fill_distiller(palette = 'RdBu')
+
+
+ggplot() +
+  geom_stars(data = (delta_add(coarse, prism, monthly = TRUE) - filter(prism)) ) +
+  facet_wrap(~time) +
+  coord_quickmap() +
+  scale_fill_distiller(palette = 'RdBu')
+```
+
+This shows the machine precision issues with values not exactly equal to zero after centering - - - this is ok in the real world, but does it make any difference for the svd?
+
+```{r}
+prism %>% get_anomalies(monthly = TRUE) %>% st_apply(1:2, mean) %>% plot
+prism %>% get_anomalies(monthly = FALSE) %>% st_apply(1:2, mean) %>% plot
+(units::drop_units(prism) - st_apply(prism, 1:2, mean)) %>% st_apply(1:2, mean) %>% plot
+```
+
+```{r}
+delta_mul(prism, prism, monthly = FALSE) %>% plot
+```

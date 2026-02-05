@@ -205,36 +205,45 @@ Visualize the leading EOFs as correlation coefficients.
 ```{r, fig.width = 7, fig.asp = .875}
 a <- ggplot() +
   geom_stars(data = st_crop(get_correlation(prism, prism_patterns), states_wus)) +
-        geom_sf(data = states_wus, fill = NA, color = 'black') +
+  geom_sf(data = states_wus, fill = NA, color = 'black') +
   facet_wrap(~PC, nrow = 1) +
-scale_fill_scico(palette = 'broc', limits = c(-1, 1), name = 'Correlation', na.value = NA) +
-    labs(x = 'Longitude', y = 'Latitude') +
+  scale_fill_scico(palette = 'broc', limits = c(-1, 1), name = 'Correlation', na.value = NA) +
+  labs(x = 'Longitude', y = 'Latitude') +
   theme_void()
-
+get_correlation(prism, prism_patterns)[states_wus]
 b <- ggplot() +
-  geom_stars(data = st_crop(get_correlation(cera, cera_patterns), states_wus) %>% split %>% mutate(PC1 = PC1 * -1, PC2 = PC2 * -1, PC4 = PC4 * -1) %>% merge(name= 'PC')) + # the signs are arbitrary, so adjust the cera signs so the colors match prism)
-        geom_sf(data = states_wus, fill = NA, color = 'black') +
+  geom_stars(data = st_crop(get_correlation(cera, cera_patterns), states_wus) %>% 
+               split() %>% 
+               mutate(PC1 = PC1 * -1, PC2 = PC2 * -1, PC4 = PC4 * -1) %>% 
+               merge(name= 'PC')) + # the signs are arbitrary, so adjust the cera signs so the colors match prism)
+  geom_sf(data = states_wus, fill = NA, color = 'black') +
   facet_wrap(~PC, nrow = 1) +
-scale_fill_scico(palette = 'broc', limits = c(-1, 1), name = 'Correlation', na.value = NA) +
-    labs(x = 'Longitude', y = 'Latitude') +
+  scale_fill_scico(palette = 'broc', limits = c(-1, 1), name = 'Correlation', na.value = NA) +
+  labs(x = 'Longitude', y = 'Latitude') +
   theme_void()
 
 c <- ggplot() +
-geom_stars(data = st_crop(get_correlation(ccsm, ccsm_patterns),states_wus) %>% split %>% mutate(PC1 = PC1 * -1,
-         PC2 = PC2 * -1,
-         PC3 = PC3 * -1) %>% merge(name = 'PC')) +
-          geom_sf(data = states_wus, fill = NA, color = 'black') +
+  geom_stars(data = st_crop(get_correlation(ccsm, ccsm_patterns), states_wus) %>% 
+               split() %>%
+               mutate(PC1 = PC1 * -1,
+                      PC2 = PC2 * -1,
+                      PC3 = PC3 * -1) %>% 
+               merge(name = 'PC')) +
+  geom_sf(data = states_wus, fill = NA, color = 'black') +
   facet_wrap(~PC, nrow = 1) +
-scale_fill_scico(palette = 'broc', limits = c(-1, 1), name = 'Correlation', na.value = NA) +
-    labs(x = 'Longitude', y = 'Latitude') +
+  scale_fill_scico(palette = 'broc', limits = c(-1, 1), name = 'Correlation', na.value = NA) +
+  labs(x = 'Longitude', y = 'Latitude') +
   theme_void()
 
 (a / b / c) + plot_layout(guides = 'collect') + plot_annotation(tag_levels = 'a', tag_prefix = '(', tag_suffix = ')') & theme(legend.position = 'bottom')
 ```
+```{r}
+states_wus
+```
 
 
 ```{r}
-t1 <- st_crop(get_correlation(ccsm, ccsm_patterns),states_wus) %>% split %>% mutate(PC1 = PC1 * -1,
+t1 <- st_crop(get_correlation(ccsm, ccsm_patterns), states_wus) %>% split %>% mutate(PC1 = PC1 * -1,
          PC2 = PC2 * -1,
          PC3 = PC3 * -1) %>% merge(name = 'PC')
 
@@ -242,37 +251,39 @@ t2 <- st_crop(get_correlation(cera, cera_patterns), states_wus) %>% split %>% mu
 
 t1
 ```
+
 ```{r, fig.width = 7, fig.asp = .875}
 ## flipped for common period
 a <- ggplot() +
   geom_stars(data = st_crop(get_correlation(prism, prism_patterns), states_wus)) +
-        geom_sf(data = states_wus, fill = NA, color = 'black') +
+  geom_sf(data = states_wus, fill = NA, color = 'black') +
   facet_wrap(~PC, nrow = 1) +
-scale_fill_scico(palette = 'broc', limits = c(-1, 1), name = 'Correlation', na.value = NA) +
-    labs(x = 'Longitude', y = 'Latitude') +
+  scale_fill_scico(palette = 'broc', limits = c(-1, 1), name = 'Correlation', na.value = NA) +
+  labs(x = 'Longitude', y = 'Latitude') +
   theme_void()
 
 b <- ggplot() +
   geom_stars(data = st_crop(get_correlation(cera, cera_patterns), states_wus) %>% split %>% mutate(PC1 = PC1 * -1, PC2 = PC2 * -1, PC4 = PC4 * -1) %>% merge(name= 'PC')) + # the signs are arbitrary, so adjust the cera signs so the colors match prism)
-        geom_sf(data = states_wus, fill = NA, color = 'black') +
+  geom_sf(data = states_wus, fill = NA, color = 'black') +
   facet_wrap(~PC, nrow = 1) +
-scale_fill_scico(palette = 'broc', limits = c(-1, 1), name = 'Correlation', na.value = NA) +
-    labs(x = 'Longitude', y = 'Latitude') +
+  scale_fill_scico(palette = 'broc', limits = c(-1, 1), name = 'Correlation', na.value = NA) +
+  labs(x = 'Longitude', y = 'Latitude') +
   theme_void()
 
 c <- ggplot() +
-geom_stars(data = st_crop(get_correlation(ccsm, ccsm_patterns),states_wus) %>% split %>% mutate(PC1 = PC1,
-         PC2 = PC2,
-         PC3 = PC3*-1,
-         PC4 = PC4) %>% merge(name = 'PC')) +
-          geom_sf(data = states_wus, fill = NA, color = 'black') +
+  geom_stars(data = st_crop(get_correlation(ccsm, ccsm_patterns),states_wus) %>% split %>% mutate(PC1 = PC1,
+                                                                                                  PC2 = PC2,
+                                                                                                  PC3 = PC3*-1,
+                                                                                                  PC4 = PC4) %>% merge(name = 'PC')) +
+  geom_sf(data = states_wus, fill = NA, color = 'black') +
   facet_wrap(~PC, nrow = 1) +
-scale_fill_scico(palette = 'broc', limits = c(-1, 1), name = 'Correlation', na.value = NA) +
-    labs(x = 'Longitude', y = 'Latitude') +
+  scale_fill_scico(palette = 'broc', limits = c(-1, 1), name = 'Correlation', na.value = NA) +
+  labs(x = 'Longitude', y = 'Latitude') +
   theme_void()
 
 (a / b / c) + plot_layout(guides = 'collect') + plot_annotation(tag_levels = 'a', tag_prefix = '(', tag_suffix = ')') & theme(legend.position = 'bottom')
 ```
+
 ```{r}
 ggsave('eofs.png', height = 6, width = 7, dpi = 600)
 ```
@@ -314,6 +325,7 @@ Also calculate the false discovery rate, and generate points where < 0.1.
 ppt_sig <- get_fdr(prism_clim['ppt'], prism_patterns) %>%
   drop_crumbs(units::set_units(100, km))  %>% 
   smooth(method = 'ksmooth', smoothness = 5)
+
 tmean_sig <- get_fdr(prism_clim['tmean'], prism_patterns) %>%
   drop_crumbs(units::set_units(100, km))  %>% 
   smooth(method = 'ksmooth', smoothness = 5)
@@ -324,17 +336,17 @@ Plot the results.
 ```{r}
 e <- ggplot() +
   geom_stars(data = ppt_corr) +
-   geom_sf(data = ppt_sig, alpha = 0.65) +
-    facet_wrap(~paste0(PC, '-Precipitation'), nrow = 1) +
-    geom_sf(data = states_wus, fill = NA, color = 'black') +
+  geom_sf(data = ppt_sig, alpha = 0.65) +
+  facet_wrap(~paste0(PC, '-Precipitation'), nrow = 1) +
+  geom_sf(data = states_wus, fill = NA, color = 'black') +
   scale_fill_scico(palette = 'vikO', limits = c(-1, 1), name = 'Correlation', na.value = NA) +
   labs(x = 'Longitude', y = 'Latitude') +
   theme_void()
 
 f <- ggplot() +
   geom_stars(data = tmean_corr) +
-   geom_sf(data = tmean_sig, alpha = 0.65) +
-    geom_sf(data = states_wus, fill = NA, color = 'black') +
+  geom_sf(data = tmean_sig, alpha = 0.65) +
+  geom_sf(data = states_wus, fill = NA, color = 'black') +
   facet_wrap(~paste0(PC, '-Temperature'), nrow = 1) +
   scale_fill_scico(palette = 'vikO', limits = c(-1, 1), name = 'Correlation', na.value = NA) +
   labs(x = 'Longitude', y = 'Latitude') +
@@ -405,7 +417,6 @@ Set up a 5 fold cross validation experiment for selecting the truncation level, 
 cv_eot_data <- prep_eot(cera, prism, 10, 10, 10)
 ```
 
-
 ```{r, warning = FALSE, message = FALSE}
 cv_eot <- tibble(k = 1:10) %>%
   mutate(pred = purrr::map(k, predict_eot, cv = cv_eot_data),
@@ -422,6 +433,44 @@ cv_cca <- expand_grid(kx = 1:10, ky = 1:10, kxy = 1:10) %>%
                                                 obs = prism) %>% 
                      fit_cv(fun = predict_cca, k = ..3, prism))) %>%
   unnest_wider(cv)
+```
+```{r}
+library(profvis)
+
+prism_mon <- system.file('testdata/prism_test.RDS', package = 'tidyEOF') %>%
+  readRDS()
+
+get_patterns(filter(prism_mon), k = 1) %>% reconstruct_field(nonneg = FALSE) %>% `-`(filter(prism_mon)) %>%st_apply(1:2, function(x) sqrt(mean(x^2))) %>% plot
+
+get_patterns(filter(prism_mon), k = 36)$amplitudes
+
+profvis({
+  get_climatology(prism)
+})
+ 
+expand_grid(kx = 5, ky = 5, kxy = 5) %>%
+  filter(kxy <= pmin(kx, ky)) %>%
+  mutate(cv = pmap(list(kx, ky, kxy), ~prep_cca(..1, ..2, 
+                                                preds = cera, 
+                                                obs = prism) %>% 
+                     fit_cv(fun = predict_cca, k = ..3, prism))) %>%
+  unnest_wider(cv)
+})
+
+prism %>%
+  mutate(across(.fns = mean))
+units::set_units(prism, 'mm')
+prism %>%
+      purrr::modify2(prism, ~ units::set_units(.x, units(.y), mode = 'standard')) %>%
+      setNames(names(prism)) %>%
+      st_as_stars(dimensions = st_dimensions(prism))
+
+prism %>%
+      purrr::map2_dfc(prism, ~ units::set_units(.x, units(.y), mode = 'standard')) %>%
+      setNames(names(prism)) %>%
+      st_as_stars(dimensions = st_dimensions(prism))
+
+fit_cv
 ```
 
 ```{r}
@@ -636,12 +685,12 @@ ggsave('cca_cv.png', width = 8, height = 4.944, dpi = 600)
 # k's here could be taken directly from the CV results above
 recon_20c_time <- predict_cca(get_patterns(filter(cera, time >= 1982), 5), 
             get_patterns(filter(prism, time <= 2010), 8), 
-            cera,
+            filter(cera), # stopgap for nonzero dimension start
             k = 5)
 
 recon_20c_space <- predict_cca(get_patterns(filter(cera, time >= 1982), 10), 
             get_patterns(filter(prism, time <= 2010), 9), 
-            cera,
+            filter(cera),
             k = 7)
 ```
 
@@ -678,7 +727,7 @@ ccsm_series_raw <- get_total(ccsm) %>% filter(time >= 1700)
 
 delta_baseline <- delta_add(filter(cera_raw, between(time, 1982, 2010)), 
       filter(prism, between(time, 1982, 2010)),
-      cera_raw) %>%
+      filter(cera_raw)) %>%
   get_total()
 
 noaa_series <- predict_cca(get_patterns(filter(noaa, between(time, 1982, 2015)), 5), 
@@ -781,6 +830,7 @@ recon_series %>%
   theme_bw() +
   theme(legend.position = 'bottom')
 ```
+
 ```{r}
 #noaa test
 wus_stats %>%
