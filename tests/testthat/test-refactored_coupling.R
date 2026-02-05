@@ -10,11 +10,11 @@ test_that("refactored couple produces same results as original predict_cca", {
     mutate(tmean = tmean * 0.8 + units::set_units(rnorm(length(tmean), 0, 1), "°C"))
 
   # Extract patterns (disable area weighting for test data without geometry)
-  prism_patterns <- patterns(filter(prism_test, time <= 2000), k = 3, weight = FALSE)
-  cera_patterns <- patterns(filter(cera_test, time <= 2000), k = 3, weight = FALSE)
+  prism_patterns <- patterns(filter(prism_test, time <= as.Date("2018-12-01")), k = 3, weight = FALSE)
+  cera_patterns <- patterns(filter(cera_test, time <= as.Date("2018-12-01")), k = 3, weight = FALSE)
 
   # Test data
-  test_data <- filter(cera_test, time > 2000, time <= 2005)
+  test_data <- filter(cera_test, time > as.Date("2018-12-01"))
 
   # Compare old vs new implementation
   # Note: We can't directly test against the old implementation since it's been refactored
@@ -52,8 +52,8 @@ test_that("couple handles edge cases appropriately", {
   cera_test <- prism_test %>%
     mutate(tmean = tmean * 0.8)
 
-  prism_patterns <- patterns(filter(prism_test, time <= 2000), k = 3)
-  cera_patterns <- patterns(filter(cera_test, time <= 2000), k = 4)
+  prism_patterns <- patterns(filter(prism_test, time <= as.Date("2018-12-01")), k = 3)
+  cera_patterns <- patterns(filter(cera_test, time <= as.Date("2018-12-01")), k = 4)
 
   # Test k validation
   expect_warning(
@@ -84,9 +84,9 @@ test_that("predict.coupled_patterns handles edge cases", {
   cera_test <- prism_test %>%
     mutate(tmean = tmean * 0.8)
 
-  prism_patterns <- patterns(filter(prism_test, time <= 2000), k = 3, weight = FALSE)
-  cera_patterns <- patterns(filter(cera_test, time <= 2000), k = 3, weight = FALSE)
-  test_data <- filter(cera_test, time > 2000, time <= 2002)
+  prism_patterns <- patterns(filter(prism_test, time <= as.Date("2018-12-01")), k = 3, weight = FALSE)
+  cera_patterns <- patterns(filter(cera_test, time <= as.Date("2018-12-01")), k = 3, weight = FALSE)
+  test_data <- filter(cera_test, time > as.Date("2018-12-01"))
 
   coupled <- couple(cera_patterns, prism_patterns, k = 2)
 
@@ -113,8 +113,8 @@ test_that("canonical correlation utilities work correctly", {
   cera_test <- prism_test %>%
     mutate(tmean = tmean * 0.8)
 
-  prism_patterns <- patterns(filter(prism_test, time <= 2000), k = 3, weight = FALSE)
-  cera_patterns <- patterns(filter(cera_test, time <= 2000), k = 3, weight = FALSE)
+  prism_patterns <- patterns(filter(prism_test, time <= as.Date("2018-12-01")), k = 3, weight = FALSE)
+  cera_patterns <- patterns(filter(cera_test, time <= as.Date("2018-12-01")), k = 3, weight = FALSE)
 
   coupled <- couple(cera_patterns, prism_patterns, k = 2)
 
@@ -124,7 +124,7 @@ test_that("canonical correlation utilities work correctly", {
   expect_s3_class(canon_corr, "data.frame")
   expect_equal(nrow(canon_corr), 2)
   expect_true(all(c("mode", "correlation", "correlation_squared", "variance_explained") %in% names(canon_corr)))
-  expect_true(all(canon_corr$correlation >= 0 & canon_corr$correlation <= 1))
+  expect_true(all(canon_corr$correlation >= -1e-10 & canon_corr$correlation <= 1 + 1e-10))
 
   # Test canonical variables extraction
   pred_canonical <- get_canonical_variables(coupled, cera_patterns, type = "predictor")
@@ -145,8 +145,8 @@ test_that("project_patterns validation works", {
   prism_test <- system.file('testdata/prism_test.RDS', package = 'tidyeof') %>%
     readRDS()
 
-  patterns <- patterns(filter(prism_test, time <= 2000), k = 3, weight = FALSE)
-  test_data <- filter(prism_test, time > 2000, time <= 2002)
+  patterns <- patterns(filter(prism_test, time <= as.Date("2018-12-01")), k = 3, weight = FALSE)
+  test_data <- filter(prism_test, time > as.Date("2018-12-01"))
 
   # Test normal projection
   projections <- project_patterns(patterns, test_data)
@@ -156,7 +156,7 @@ test_that("project_patterns validation works", {
   expect_equal(ncol(projections) - 1, 3)  # 3 PCs plus time
 
   # Test validation (would need mock data with incompatible dimensions to test errors)
-  expect_no_error(project_patterns(patterns, test_data, validate = TRUE))
+  expect_no_error(project_patterns(patterns, test_data))
 })
 
 # NOTE: Legacy wrapper function tests removed - functions have been archived
@@ -172,8 +172,8 @@ test_that("print and summary methods work for coupled_patterns", {
   cera_test <- prism_test %>%
     mutate(tmean = tmean * 0.8)
 
-  prism_patterns <- patterns(filter(prism_test, time <= 2000), k = 3, weight = FALSE)
-  cera_patterns <- patterns(filter(cera_test, time <= 2000), k = 3, weight = FALSE)
+  prism_patterns <- patterns(filter(prism_test, time <= as.Date("2018-12-01")), k = 3, weight = FALSE)
+  cera_patterns <- patterns(filter(cera_test, time <= as.Date("2018-12-01")), k = 3, weight = FALSE)
 
   coupled <- couple(cera_patterns, prism_patterns, k = 2)
 

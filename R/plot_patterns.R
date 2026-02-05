@@ -75,14 +75,9 @@ plot.patterns <- function(x,
       # Create amplitude plot with matching layout
       p_amps <- .plot_amplitudes_internal(x, scale = scale, scale_y = scale_y, events = events, layout = layout$pc)
 
-      # Combine with patchwork using top-over-bottom layout and alignment tricks
-      return(p_eofs /
-             p_amps +
-             patchwork::plot_layout(
-               heights = layout$heights,
-               guides = "collect",
-               axis_titles = "collect"
-             ) +
+      # Combine with patchwork using top-over-bottom layout
+      return(
+        patchwork::wrap_plots(p_eofs, p_amps, ncol = 1, heights = layout$heights) +
              patchwork::plot_annotation(
                title = glue::glue("EOF Analysis: {glue::glue_collapse(x$names, sep = ', ')}"),
                subtitle = glue::glue("k = {x$k} modes | {ifelse(x$scaled, 'scaled', 'unscaled')} | {ifelse(x$rotate, 'rotated', 'unrotated')}")

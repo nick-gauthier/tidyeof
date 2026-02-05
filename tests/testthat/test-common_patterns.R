@@ -277,8 +277,8 @@ test_that("single source common_patterns is equivalent to patterns", {
   expect_s3_class(pat, "patterns")
   expect_equal(pat$k, 3)
 
-  # Direct patterns() call for comparison
-  direct <- patterns(d$prism, k = 3, weight = FALSE)
+  # Direct patterns() call for comparison (scale = TRUE to match common_patterns default)
+  direct <- patterns(d$prism, k = 3, weight = FALSE, scale = TRUE)
 
   # Eigenvalues should be very close (same PCA)
   expect_equal(
@@ -317,6 +317,18 @@ test_that("common_patterns rejects non-stars elements", {
   expect_error(
     common_patterns(list(a = data.frame(x = 1:10)), k = 3),
     "stars"
+  )
+})
+
+test_that("common_patterns rejects mismatched spatial grids", {
+  d <- load_test_data()
+
+  # Create a dataset with different spatial coordinates (shifted x offset)
+  bad_grid <- stars::st_set_dimensions(d$prism, "x", offset = -100)
+
+  expect_error(
+    common_patterns(list(a = d$prism, b = bad_grid), k = 3),
+    "grid_mismatch|coordinates differ"
   )
 })
 

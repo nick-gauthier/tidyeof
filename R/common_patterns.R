@@ -76,7 +76,46 @@ common_patterns <- function(datasets, k = 4, scale = TRUE, rotate = FALSE,
   }
 
   source_names <- names(datasets)
-  n_sources <- length(datasets)
+  first_dat <- datasets[[1]]
+
+  # --- Validate spatial grids match ---
+  if (length(datasets) > 1) {
+    ref_dims <- stars::st_dimensions(first_dat)
+    ref_spatial <- setdiff(names(ref_dims), "time")
+
+    for (nm in source_names[-1]) {
+      other_dims <- stars::st_dimensions(datasets[[nm]])
+      other_spatial <- setdiff(names(other_dims), "time")
+
+      # Check spatial dimension names
+      if (!identical(ref_spatial, other_spatial)) {
+        cli::cli_abort(
+          "Spatial dimensions don't match: {.val {source_names[1]}} has {.val {ref_spatial}}, {.val {nm}} has {.val {other_spatial}}.",
+          class = "tidyeof_grid_mismatch"
+        )
+      }
+
+      # Check spatial dimension sizes and coordinates
+      for (sdim in ref_spatial) {
+        ref_vals <- stars::st_get_dimension_values(first_dat, sdim)
+        other_vals <- stars::st_get_dimension_values(datasets[[nm]], sdim)
+
+        if (length(ref_vals) != length(other_vals)) {
+          cli::cli_abort(
+            "Dimension {.field {sdim}} has {length(ref_vals)} cells in {.val {source_names[1]}} but {length(other_vals)} in {.val {nm}}.",
+            class = "tidyeof_grid_mismatch"
+          )
+        }
+
+        if (!isTRUE(all.equal(ref_vals, other_vals, tolerance = 1e-6))) {
+          cli::cli_abort(
+            "Dimension {.field {sdim}} coordinates differ between {.val {source_names[1]}} and {.val {nm}}. Datasets must share the same spatial grid.",
+            class = "tidyeof_grid_mismatch"
+          )
+        }
+      }
+    }
+  }
 
   # --- Per-source: compute climatology and anomalies ---
   source_climatologies <- purrr::map(datasets, get_climatology, monthly = monthly)
@@ -84,169 +123,53 @@ common_patterns <- function(datasets, k = 4, scale = TRUE, rotate = FALSE,
     get_anomalies(dat, clim = source_climatologies[[nm]], scale = scale, monthly = monthly)
   })
 
-  # Capture units from first dataset
-  first_dat <- datasets[[1]]
-  original_units <- setNames(
-    purrr::map(names(first_dat), ~tryCatch(units(first_dat[[.x]]), error = function(e) NULL)),
-    names(first_dat)
-  )
+  # Track time steps per source for splitting amplitudes later
+  source_times <- purrr::map(datasets, ~stars::st_get_dimension_values(.x, "time"))
+  source_n_times <- purrr::map_int(source_times, length)
+
+  if (length(unique(source_n_times)) > 1) {
+    n_desc <- paste0(source_names, " (", source_n_times, ")", collapse = ", ")
+    cli::cli_warn(
+      "Datasets have different numbers of time steps: {n_desc}. Sources with more time steps will have greater influence on the shared EOFs.",
+      class = "tidyeof_unequal_times"
+    )
+  }
+
+  # --- Concatenate anomalies along time ---
+  # Ensure consistent attribute names before concatenating
+  ref_name <- names(first_dat)[[1]]
+  source_anomalies <- purrr::map(source_anomalies, function(anom) {
+    if (names(anom)[[1]] != ref_name) {
+      setNames(anom, ref_name)
+    } else {
+      anom
+    }
+  })
+
+  concat <- do.call(c, c(source_anomalies, along = "time"))
 
   # --- Compute spatial weights once from first dataset ---
   weights <- if (weight) area_weights(first_dat) else NULL
 
-  # --- Per-source: flatten, find valid pixels, weight ---
-  flattened_sources <- purrr::map(source_anomalies, function(anom) {
-    flat <- flatten_time_space(units::drop_units(anom)[1])
-    valid <- which(!apply(flat$matrix, 2, anyNA))
-    list(flat = flat, valid = valid)
-  })
+  # --- Run PCA on concatenated data (reuses existing get_eofs machinery) ---
+  eofs <- get_eofs(concat, k = k, rotate = rotate,
+                   irlba_threshold = irlba_threshold, weights = weights)
 
-  # --- Compute valid_pixels intersection ---
-  all_valid <- purrr::map(flattened_sources, "valid")
-  shared_valid <- Reduce(intersect, all_valid)
+  # --- Compute shared signs from EOFs ---
+  signs <- compute_eof_signs(eofs$spatial_patterns)
 
-  if (length(shared_valid) == 0) {
-    cli::cli_abort(
-      "No spatial pixels are valid across all sources. Check for non-overlapping NA patterns.",
-      class = "tidyeof_no_valid_pixels"
-    )
-  }
-
-  n_pixels_total <- ncol(flattened_sources[[1]]$flat$matrix)
-
-  # Compute weights for shared valid pixels
-  if (!is.null(weights)) {
-    if (length(weights) != n_pixels_total) {
-      cli::cli_abort(
-        "Length of weights ({length(weights)}) must match number of spatial points ({n_pixels_total}).",
-        class = "tidyeof_weight_mismatch"
-      )
-    }
-    weights_valid <- weights[shared_valid]
-  } else {
-    weights_valid <- rep(1, length(shared_valid))
-  }
-
-  # --- Per-source: extract valid pixels, apply weights, track row ranges ---
-  weighted_matrices <- list()
-  row_ranges <- list()
-  source_times <- list()
+  # --- Split amplitudes by source and build per-source patterns ---
+  source_patterns <- list()
   current_row <- 1L
 
   for (nm in source_names) {
-    mat <- flattened_sources[[nm]]$flat$matrix[, shared_valid, drop = FALSE]
-    mat_weighted <- sweep(mat, 2, weights_valid, `*`)
-    n_rows <- nrow(mat_weighted)
+    n <- source_n_times[[nm]]
+    rows <- current_row:(current_row + n - 1L)
+    current_row <- current_row + n
 
-    weighted_matrices[[nm]] <- mat_weighted
-    row_ranges[[nm]] <- c(start = current_row, end = current_row + n_rows - 1L)
-    source_times[[nm]] <- stars::st_get_dimension_values(datasets[[nm]], "time")
-    current_row <- current_row + n_rows
-  }
-
-  # --- Concatenate all weighted anomaly matrices ---
-  concat_matrix <- do.call(rbind, weighted_matrices)
-
-  # --- Validate k ---
-  max_k <- min(nrow(concat_matrix) - 1, length(shared_valid))
-  check_k_valid(k, max_k)
-
-  # --- PCA on concatenated matrix ---
-  pca_result <- perform_pca_smart(
-    concat_matrix,
-    k = k,
-    center = FALSE,
-    size_threshold = irlba_threshold
-  )
-
-  # Keep matrices for synchronized operations
-  loadings_matrix <- pca_result$rotation[, 1:k, drop = FALSE]
-  scores_matrix <- pca_result$x[, 1:k, drop = FALSE]
-  sdev_vector <- pca_result$sdev[1:k]
-
-  rotation_matrix <- NULL
-
-  # --- Optional rotation ---
-  if (rotate && k > 1) {
-    rotation_result <- rotate_pca_components(loadings_matrix, scores_matrix, sdev_vector)
-    loadings_weighted <- rotation_result$loadings
-    all_scores <- rotation_result$scores
-    rotation_matrix <- rotation_result$rotation_matrix
-    component_sdev <- rotation_result$sdev
-    component_variance <- rotation_result$eigenvalues
-  } else {
-    loadings_weighted <- loadings_matrix
-    all_scores <- scores_matrix
-    component_sdev <- sdev_vector
-    component_variance <- sdev_vector^2
-  }
-
-  # --- Remove weights from loadings to get physical-unit EOFs ---
-  loadings <- sweep(loadings_weighted, 1, weights_valid, `/`)
-
-  # --- Build shared EOF stars object ---
-  pc_names <- names0(k, 'PC')
-  dims <- dim(first_dat)
-
-  full_patterns <- array(NA, dim = c(k, n_pixels_total))
-  full_patterns[, shared_valid] <- t(loadings)
-
-  if (has_geometry_dimension(first_dat)) {
-    template <- first_dat[,,1:k, drop = FALSE]
-    spatial_patterns <- template %>%
-      stars::st_set_dimensions('time', values = pc_names, names = 'PC') %>%
-      setNames("weight")
-    spatial_patterns[[1]] <- t(full_patterns)
-  } else {
-    template <- first_dat[,,,1:k, drop = FALSE]
-    spatial_patterns <- template %>%
-      stars::st_set_dimensions('time', values = pc_names, names = 'PC') %>%
-      setNames("weight")
-    pattern_array <- array(full_patterns, dim = c(k, dims[[1]], dims[[2]]))
-    reordered_patterns <- aperm(pattern_array, c(2, 3, 1))
-    spatial_patterns[[1]] <- reordered_patterns
-  }
-
-  # --- Build eigenvalues tibble ---
-  n_total <- length(pca_result$sdev)
-  eigenvalues <- tidy_pca_sdev(pca_result) |>
-    mutate(eigenvalues = std.dev ^ 2,
-           percent = percent * 100,
-           cumulative = cumulative * 100,
-           error = sqrt(2 / n_total),
-           low = eigenvalues * (1 - error) * 100 / sum(eigenvalues),
-           hi = eigenvalues * (1 + error) * 100 / sum(eigenvalues),
-           cumvar_line = hi + 0.02 * max(hi))
-
-  if (rotate && k > 1) {
-    total_variance <- sum(pca_result$sdev^2)
-    rotated_percent <- component_variance / total_variance * 100
-    rotated_cumulative <- cumsum(rotated_percent)
-
-    eigenvalues <- eigenvalues %>%
-      mutate(
-        std.dev = if_else(PC <= k, component_sdev[PC], std.dev),
-        eigenvalues = if_else(PC <= k, component_variance[PC], eigenvalues),
-        percent = if_else(PC <= k, rotated_percent[PC], percent),
-        cumulative = if_else(PC <= k, rotated_cumulative[PC], cumulative)
-      )
-  }
-
-  # --- Compute shared sign vector from shared EOFs ---
-  # Build a temporary patterns-like object just to compute signs
-  signs <- compute_eof_signs(spatial_patterns)
-
-  # --- Per-source: create patterns objects ---
-  source_patterns <- list()
-
-  for (nm in source_names) {
-    rr <- row_ranges[[nm]]
-    source_scores <- all_scores[rr["start"]:rr["end"], , drop = FALSE]
-    colnames(source_scores) <- pc_names
-
-    source_amps <- source_scores %>%
-      as_tibble() %>%
-      mutate(time = source_times[[nm]], .before = 1)
+    # Split amplitudes and restore source-specific times
+    source_amps <- eofs$amplitudes[rows, ]
+    source_amps$time <- source_times[[nm]]
 
     # Capture source-specific units
     src_dat <- datasets[[nm]]
@@ -256,14 +179,14 @@ common_patterns <- function(datasets, k = 4, scale = TRUE, rotate = FALSE,
     )
 
     pat <- new_patterns(
-      eofs = spatial_patterns,
+      eofs = eofs$spatial_patterns,
       amplitudes = source_amps,
-      eigenvalues = eigenvalues,
+      eigenvalues = eofs$eigenvalues,
       k = k,
-      proj_matrix = loadings_weighted,
-      center = pca_result$center,
-      scale = pca_result$scale,
-      rotation = rotation_matrix,
+      proj_matrix = eofs$proj_matrix,
+      center = eofs$center,
+      scale = eofs$scale,
+      rotation = eofs$rotation_matrix,
       climatology = source_climatologies[[nm]],
       units = src_units,
       names = names(src_dat),
@@ -271,12 +194,10 @@ common_patterns <- function(datasets, k = 4, scale = TRUE, rotate = FALSE,
       monthly = monthly,
       rotate = rotate,
       weight = weight,
-      valid_pixels = shared_valid
+      valid_pixels = eofs$valid_pixels
     )
 
-    # Apply consistent signs across all sources
     pat <- apply_sign_flips(pat, signs)
-
     source_patterns[[nm]] <- pat
   }
 
@@ -286,7 +207,7 @@ common_patterns <- function(datasets, k = 4, scale = TRUE, rotate = FALSE,
       source_patterns = source_patterns,
       sources = source_names,
       k = k,
-      shared_eigenvalues = eigenvalues,
+      shared_eigenvalues = eofs$eigenvalues,
       pattern_opts = list(
         scale = scale,
         rotate = rotate,
@@ -318,6 +239,99 @@ common_patterns <- function(datasets, k = 4, scale = TRUE, rotate = FALSE,
   }
 }
 
+#' Plot method for common_patterns objects
+#'
+#' Shows shared EOFs on top and overlaid amplitude time series (colored by
+#' source) on the bottom.
+#'
+#' @param x A common_patterns object
+#' @param scale Amplitude scaling: "standardized" (default), "variance", or "raw"
+#' @param scale_y Y-axis scaling: "fixed" (default) or "free"
+#' @param overlay Optional sf object to overlay on EOF maps
+#' @param overlay_color Color for overlay geometry (default "grey30")
+#' @param overlay_fill Fill for overlay geometry (default NA)
+#' @param ... Additional arguments (currently unused)
+#' @return A patchwork object (EOFs + amplitudes)
+#' @export
+plot.common_patterns <- function(x,
+                                 scale = c("standardized", "variance", "raw"),
+                                 scale_y = c("fixed", "free"),
+                                 overlay = NULL,
+                                 overlay_color = "grey30",
+                                 overlay_fill = NA,
+                                 ...) {
+  scale <- match.arg(scale)
+  scale_y <- match.arg(scale_y)
+
+  # Use the first source's patterns for shared EOFs and eigenvalues
+  ref_pat <- .subset2(.subset2(x, "source_patterns"), .subset2(x, "sources")[1])
+  k <- .subset2(x, "k")
+
+  layout <- .simple_smart_layout(k)
+
+  # --- Shared EOF plot (same as plot.patterns) ---
+  p_eofs <- .plot_eofs_internal(ref_pat, layout = layout$eof,
+                                overlay = overlay, overlay_color = overlay_color,
+                                overlay_fill = overlay_fill)
+
+  # --- Overlaid amplitude plot colored by source ---
+  pc_names <- names(ref_pat$amplitudes)[-1]
+
+  # Build combined amplitude data from all sources
+  all_amps <- purrr::imap_dfr(.subset2(x, "source_patterns"), function(pat, nm) {
+    eigs <- pat$eigenvalues %>%
+      dplyr::filter(PC <= k) %>%
+      dplyr::select(PC, std.dev) %>%
+      dplyr::mutate(PC = pc_names[PC])
+
+    amps <- pat$amplitudes %>%
+      tidyr::pivot_longer(-time, names_to = "PC", values_to = "amplitude") %>%
+      dplyr::left_join(eigs, by = "PC")
+
+    if (scale == "variance") {
+      amps <- dplyr::mutate(amps, amplitude = amplitude * std.dev)
+    } else if (scale == "raw") {
+      eof_scale <- split(pat$eofs) %>%
+        as_tibble() %>%
+        dplyr::summarise(dplyr::across(dplyr::starts_with("PC"), ~sqrt(sum(.x^2, na.rm = TRUE)))) %>%
+        tidyr::pivot_longer(dplyr::everything(), names_to = "PC", values_to = "scale_factor")
+      amps <- dplyr::left_join(amps, eof_scale, by = "PC") %>%
+        dplyr::mutate(amplitude = amplitude * scale_factor)
+    } else {
+      amps <- dplyr::mutate(amps, amplitude = amplitude / std.dev)
+    }
+
+    dplyr::mutate(amps, source = nm)
+  })
+
+  facet_args <- if (!is.null(layout$pc)) layout$pc else list()
+
+  p_amps <- ggplot2::ggplot(all_amps, ggplot2::aes(time, amplitude, color = source)) +
+    ggplot2::geom_line(alpha = 0.8) +
+    do.call(ggplot2::facet_wrap, c(list(~PC), facet_args)) +
+    ggplot2::labs(y = "Amplitude", x = NULL, color = "Source") +
+    ggplot2::theme_bw()
+
+  if (scale_y == "fixed") {
+    p_amps <- p_amps +
+      ggplot2::coord_cartesian(ylim = range(all_amps$amplitude, na.rm = TRUE))
+  }
+
+  # --- Combine with patchwork ---
+  if (!requireNamespace("patchwork", quietly = TRUE)) {
+    warning("patchwork package needed for combined plots. Install with: install.packages('patchwork')\nShowing EOFs only.")
+    return(p_eofs)
+  }
+
+  sources <- .subset2(x, "sources")
+  patchwork::wrap_plots(p_eofs, p_amps, ncol = 1, heights = layout$heights) +
+    patchwork::plot_annotation(
+      title = glue::glue("Common EOF Analysis: {glue::glue_collapse(ref_pat$names, sep = ', ')}"),
+      subtitle = glue::glue("k = {k} | Sources: {glue::glue_collapse(sources, sep = ', ')}")
+    ) &
+    ggplot2::theme(plot.margin = ggplot2::margin(5, 5, 5, 5))
+}
+
 #' @export
 print.common_patterns <- function(x, ...) {
   cli::cli_h1("Common Patterns Object")
@@ -328,6 +342,33 @@ print.common_patterns <- function(x, ...) {
   for (nm in x$sources) {
     n_times <- nrow(x$source_patterns[[nm]]$amplitudes)
     cli::cli_text("{.field {nm}}: {n_times}")
+  }
+
+  # PC congruence: pairwise amplitude correlations on shared times
+  if (length(x$sources) >= 2) {
+    pairs <- utils::combn(x$sources, 2, simplify = FALSE)
+    for (pair in pairs) {
+      amps_a <- x$source_patterns[[pair[1]]]$amplitudes
+      amps_b <- x$source_patterns[[pair[2]]]$amplitudes
+      shared <- amps_a$time %in% amps_b$time
+      if (sum(shared) < 3) next
+
+      amps_a <- amps_a[shared, ]
+      amps_b <- amps_b[amps_b$time %in% amps_a$time, ]
+      # Align row order
+      amps_a <- amps_a[order(amps_a$time), ]
+      amps_b <- amps_b[order(amps_b$time), ]
+
+      pc_cols <- setdiff(names(amps_a), "time")
+      cors <- vapply(pc_cols, function(pc) {
+        stats::cor(amps_a[[pc]], amps_b[[pc]], use = "pairwise.complete.obs")
+      }, numeric(1))
+
+      cli::cli_h2("PC congruence: {pair[1]} vs {pair[2]} (n = {nrow(amps_a)})")
+      for (i in seq_along(pc_cols)) {
+        cli::cli_text("{.field {pc_cols[i]}}: {formatC(cors[i], format = 'f', digits = 2)}")
+      }
+    }
   }
 
   cli::cli_h2("Processing Options")

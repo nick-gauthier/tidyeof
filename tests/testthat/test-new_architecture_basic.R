@@ -141,5 +141,5 @@ test_that("CCA truncation uses truncated pseudo-inverse of ycoef", {
   expected_resp <- canonical_responses %*% MASS::ginv(ycoef_k)
   expected_resp <- sweep(expected_resp, 2, cca_result$ycenter, "+")
 
-  expect_equal(as.matrix(predicted[, -1]), expected_resp, tolerance = 1e-8)
+  expect_equal(unname(as.matrix(predicted[, -1])), unname(expected_resp), tolerance = 1e-8)
 })

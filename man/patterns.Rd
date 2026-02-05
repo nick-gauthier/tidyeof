@@ -7,7 +7,7 @@
 patterns(
   dat,
   k = 4,
-  scale = TRUE,
+  scale = FALSE,
   rotate = FALSE,
   monthly = FALSE,
   weight = TRUE,

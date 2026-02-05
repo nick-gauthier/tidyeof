@@ -11,6 +11,8 @@ prep_cv_folds(
   max_k_pred = 10,
   max_k_resp = 10,
   scale = FALSE,
+  scale_pred = NULL,
+  scale_resp = NULL,
   rotate = FALSE,
   monthly = FALSE,
   weight = TRUE,
@@ -28,7 +30,15 @@ prep_cv_folds(
 
 \item{max_k_resp}{Maximum number of response EOFs to compute (default 10)}
 
-\item{scale}{Logical, whether to scale data before EOF extraction (default FALSE)}
+\item{scale}{Logical, whether to scale data before EOF extraction (default FALSE).
+Sets the default for both predictor and response; use `scale_pred` and/or
+`scale_resp` to override individually.}
+
+\item{scale_pred}{Logical, whether to scale predictor data before EOF extraction.
+Overrides `scale` for the predictor when not NULL (default NULL).}
+
+\item{scale_resp}{Logical, whether to scale response data before EOF extraction.
+Overrides `scale` for the response when not NULL (default NULL).}
 
 \item{rotate}{Logical, whether to apply varimax rotation (default FALSE)}
 

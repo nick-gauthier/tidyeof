@@ -9,7 +9,13 @@
 #' @param kfolds Number of cross-validation folds (default 5)
 #' @param max_k_pred Maximum number of predictor EOFs to compute (default 10)
 #' @param max_k_resp Maximum number of response EOFs to compute (default 10)
-#' @param scale Logical, whether to scale data before EOF extraction (default FALSE)
+#' @param scale Logical, whether to scale data before EOF extraction (default FALSE).
+#'   Sets the default for both predictor and response; use `scale_pred` and/or
+#'   `scale_resp` to override individually.
+#' @param scale_pred Logical, whether to scale predictor data before EOF extraction.
+#'   Overrides `scale` for the predictor when not NULL (default NULL).
+#' @param scale_resp Logical, whether to scale response data before EOF extraction.
+#'   Overrides `scale` for the response when not NULL (default NULL).
 #' @param rotate Logical, whether to apply varimax rotation (default FALSE)
 #' @param monthly Logical, whether to compute monthly climatology (default FALSE)
 #' @param weight Logical, whether to apply area weighting (default TRUE)
@@ -48,6 +54,8 @@ prep_cv_folds <- function(predictor, response,
                           max_k_pred = 10,
                           max_k_resp = 10,
                           scale = FALSE,
+                          scale_pred = NULL,
+                          scale_resp = NULL,
                           rotate = FALSE,
                           monthly = FALSE,
                           weight = TRUE,
@@ -58,6 +66,10 @@ prep_cv_folds <- function(predictor, response,
       class = "tidyeof_invalid_option"
     )
   }
+
+  # Resolve per-field scale settings
+  scale_pred <- scale_pred %||% scale
+  scale_resp <- scale_resp %||% scale
 
   # Validate common_with if provided
   if (!is.null(common_with)) {
@@ -123,18 +135,18 @@ prep_cv_folds <- function(predictor, response,
 
       cpat <- common_patterns(
         c(list(.primary = train_pred), common_train),
-        k = max_k_pred, scale = scale, rotate = rotate,
+        k = max_k_pred, scale = scale_pred, rotate = rotate,
         monthly = monthly, weight = weight
       )
       train_pred_patterns <- cpat$.primary
     } else {
       train_pred_patterns <- patterns(train_pred, k = max_k_pred,
-                                          scale = scale, rotate = rotate,
+                                          scale = scale_pred, rotate = rotate,
                                           monthly = monthly, weight = weight)
     }
 
     train_resp_patterns <- patterns(train_resp, k = max_k_resp,
-                                        scale = scale, rotate = rotate,
+                                        scale = scale_resp, rotate = rotate,
                                         monthly = monthly, weight = weight)
 
     list(
@@ -155,7 +167,8 @@ prep_cv_folds <- function(predictor, response,
     kfolds = kfolds,
     common_times = common_times,
     pattern_opts = list(
-      scale = scale,
+      scale_pred = scale_pred,
+      scale_resp = scale_resp,
       rotate = rotate,
       monthly = monthly,
       weight = weight
@@ -401,7 +414,8 @@ print.cv_folds <- function(x, ...) {
   }
 
   cli::cli_h2("Pattern Options")
-  cli::cli_text("Scale: {.field {x$pattern_opts$scale}}")
+  cli::cli_text("Scale (predictor): {.field {x$pattern_opts$scale_pred}}")
+  cli::cli_text("Scale (response): {.field {x$pattern_opts$scale_resp}}")
   cli::cli_text("Rotate: {.field {x$pattern_opts$rotate}}")
   cli::cli_text("Monthly: {.field {x$pattern_opts$monthly}}")
   cli::cli_text("Weight: {.field {x$pattern_opts$weight}}")

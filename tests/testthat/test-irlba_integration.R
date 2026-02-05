@@ -1,89 +1,68 @@
-test_that("IRLBA integration works correctly", {
-  skip_if_not_installed("testthat")
-
-  # Test that perform_pca_smart function exists
-  expect_true(exists("perform_pca_smart"))
-
-  # Test with small matrix (should use base prcomp)
+test_that("perform_pca_smart uses base prcomp for small data", {
   set.seed(123)
   small_matrix <- matrix(rnorm(100), nrow = 10, ncol = 10)
 
-  # Capture messages to check method selection
-  expect_message(
-    result_small <- perform_pca_smart(small_matrix, k = 3, center = FALSE, size_threshold = 200),
-    "Using base prcomp"
-  )
+  # Below threshold: no IRLBA message, just runs quietly
+  result <- perform_pca_smart(small_matrix, k = 3, center = FALSE, size_threshold = 200)
 
-  expect_true(is.list(result_small))
-  expect_true("rotation" %in% names(result_small))
-  expect_true("x" %in% names(result_small))
-  expect_equal(ncol(result_small$rotation), 3)
+  expect_true(is.list(result))
+  expect_true("rotation" %in% names(result))
+  expect_true("x" %in% names(result))
+  # base prcomp returns all components, truncation happens downstream in get_eofs()
+  expect_equal(ncol(result$rotation), ncol(small_matrix))
+})
 
-  # Test with large matrix (should trigger IRLBA if available)
+test_that("perform_pca_smart triggers IRLBA for large data", {
+  set.seed(123)
   large_matrix <- matrix(rnorm(1000), nrow = 50, ncol = 20)
 
   if (requireNamespace("irlba", quietly = TRUE)) {
     expect_message(
-      result_large <- perform_pca_smart(large_matrix, k = 3, center = FALSE, size_threshold = 500),
+      result <- perform_pca_smart(large_matrix, k = 3, center = FALSE, size_threshold = 500),
       "Using IRLBA"
     )
+    expect_equal(ncol(result$rotation), 3)
   } else {
     expect_message(
-      result_large <- perform_pca_smart(large_matrix, k = 3, center = FALSE, size_threshold = 500),
-      "irlba.*package not available"
+      result <- perform_pca_smart(large_matrix, k = 3, center = FALSE, size_threshold = 500),
+      "irlba.*unavailable"
     )
   }
 
-  expect_true(is.list(result_large))
-  expect_true("rotation" %in% names(result_large))
-  expect_true("x" %in% names(result_large))
+  expect_true(is.list(result))
+  expect_true("rotation" %in% names(result))
+  expect_true("x" %in% names(result))
 })
 
 test_that("patterns accepts irlba_threshold parameter", {
-  skip_if_not_installed("testthat")
-
-  # Test that patterns function accepts the new parameter without error
-  # We'll test the signature without running the full computation due to test data issues
   args <- formals(patterns)
-
-  # Check that irlba_threshold parameter exists with correct default
   expect_true("irlba_threshold" %in% names(args))
-  expect_equal(args$irlba_threshold, 50000)
+  expect_equal(args$irlba_threshold, 500000)
 })
 
-test_that("IRLBA fallback works correctly", {
-  skip_if_not_installed("testthat")
-
-  # Test error handling in perform_pca_smart
+test_that("perform_pca_smart requires size_threshold argument", {
   set.seed(123)
   test_matrix <- matrix(rnorm(100), nrow = 10, ncol = 10)
 
-  # Test with invalid parameters that might cause IRLBA to fail
-  # This should fall back to base prcomp
-  expect_message(
-    result <- perform_pca_smart(test_matrix, k = 3, center = FALSE),
-    "base prcomp"
+  expect_error(
+    perform_pca_smart(test_matrix, k = 3, center = FALSE),
+    "size_threshold"
   )
-
-  expect_true(is.list(result))
 })
 
-test_that("irlba_threshold parameter validation", {
-  skip_if_not_installed("testthat")
-
-  # Test that extreme threshold values work
+test_that("high threshold always uses base prcomp", {
   test_matrix <- matrix(rnorm(100), nrow = 10, ncol = 10)
 
-  # Very high threshold should always use base prcomp
-  expect_message(
-    perform_pca_smart(test_matrix, k = 3, size_threshold = 1e10),
-    "base prcomp"
+  # Very high threshold — data size is well below, so no IRLBA message
+  expect_no_message(
+    result <- perform_pca_smart(test_matrix, k = 3, center = FALSE, size_threshold = 1e10)
   )
+  expect_true(is.list(result))
 
-  # Very low threshold should try to use IRLBA if available
+  # Very low threshold should try IRLBA if available
   if (requireNamespace("irlba", quietly = TRUE)) {
     expect_message(
-      perform_pca_smart(test_matrix, k = 3, size_threshold = 1),
+      perform_pca_smart(test_matrix, k = 3, center = FALSE, size_threshold = 1),
       "IRLBA"
     )
   }

@@ -3,6 +3,7 @@
 S3method("$",common_patterns)
 S3method("[",patterns)
 S3method("[[",common_patterns)
+S3method(plot,common_patterns)
 S3method(plot,coupled_patterns)
 S3method(plot,patterns)
 S3method(predict,coupled_patterns)

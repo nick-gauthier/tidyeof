@@ -49,7 +49,7 @@ check_k_valid <- function(k, max_k, arg = rlang::caller_arg(k), call = rlang::ca
 #'
 #' @return A `patterns` object containing EOFs, amplitudes, and metadata
 #' @export
-patterns <- function(dat, k = 4, scale = TRUE, rotate = FALSE, monthly = FALSE, weight = TRUE, irlba_threshold = 500000){
+patterns <- function(dat, k = 4, scale = FALSE, rotate = FALSE, monthly = FALSE, weight = TRUE, irlba_threshold = 500000){
 
   # Input validation
   check_stars_object(dat)
