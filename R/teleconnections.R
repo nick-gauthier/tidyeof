@@ -15,14 +15,17 @@ get_correlation <- function(dat, patterns, amplitudes = NULL) {
 
   matched <- match_times(amplitudes, dat)
 
-  # FIXME: aperm(c(2,3,1)) assumes 3D raster (x, y, PC). Will break for
-  # sf geometry-based stars objects where the array is 2D (geometry, PC).
+  # BUG (pre-existing): when k=1, st_apply drops the PC dimension entirely,
+  # so st_set_dimensions(., 'PC', ...) fails with "not an existing dimension".
+  # Affects both raster and geometry paths. Needs a k=1 guard or merge_dim.
   suppressWarnings( # suppress warnings that sd is zero
-    filter(dat, time %in% matched$times) %>%
+    result <- filter(dat, time %in% matched$times) %>%
       st_apply(get_spatial_dimensions(.), function(x) cor(x, matched$amps), .fname = 'PC') %>%
-      st_set_dimensions(., 'PC', values = paste0('PC', st_get_dimension_values(., 'PC'))) %>%
-      aperm(c(2,3,1))
+      st_set_dimensions(., 'PC', values = paste0('PC', st_get_dimension_values(., 'PC')))
   )
+  # Move PC (first dim) to last: works for both 2D (PC, geometry) and 3D (PC, x, y)
+  n <- length(dim(result))
+  aperm(result, c(2:n, 1))
 }
 
 #' Calculate FDR-corrected significance contours for teleconnections
@@ -42,7 +45,13 @@ get_fdr <- function(dat, patterns, fdr = 0.1, amplitudes = NULL) {
 
   matched <- match_times(amplitudes, dat)
 
-  # FIXME: aperm(c(2,3,1)) assumes 3D raster — same geometry issue as get_correlation().
+  if (has_geometry_dimension(dat)) {
+    cli::cli_abort(
+      "FDR contour maps require raster data. Use {.fn get_correlation} for geometry-based stars.",
+      class = "tidyeof_geometry_unsupported"
+    )
+  }
+
   suppressWarnings( # suppress warnings that sd is zero
     fdr_rast <- filter(dat, time %in% matched$times) %>%
       st_apply(get_spatial_dimensions(.), fdr_fun, amps = matched$amps, .fname = 'PC') %>%

@@ -46,25 +46,45 @@ get_climatology <- function(dat, monthly = FALSE) {
     }
 
     # Monthly climatology calculation
-    # NOTE: stars::aggregate has a bug where factor-returning grouping functions
-    # cause the new dimension to be named 'geometry' instead of 'time'. This happens
-    # because `by` gets reassigned from function -> character vector (factor levels)
-    # before the dimension naming logic runs, so is.function(by) returns FALSE.
-    # See: https://github.com/r-spatial/stars/blob/main/R/aggregate.R lines 151-156, 220-224
-    #
-    # We work around this by renaming 'geometry' -> 'month' after aggregation.
-    #
-    # LIMITATION: This approach will BREAK for sf-based stars objects (with a real
-    # 'geometry' dimension) because aggregate() will collide with the existing
-    # geometry dimension. When we add support for sf-based stars, this will need
-    # to be rewritten — likely using a manual grouping approach instead of aggregate().
-    mean_result <- aggregate(dat, by_months, FUN = mean) %>%
-      aperm(c(2, 3, 1)) %>%
-      st_set_dimensions('geometry', names = 'month')
+    if (has_geometry_dimension(dat)) {
+      # For geometry stars: direct array manipulation avoids aggregate() collision
+      # with the real geometry dimension name
+      months <- by_months(times)
+      month_levels <- levels(months)
+      n_months <- length(month_levels)
+      mat <- dat[[1]]  # geometry × time matrix
+      n_geom <- nrow(mat)
 
-    sd_result <- aggregate(dat, by_months, FUN = sd) %>%
-      aperm(c(2, 3, 1)) %>%
-      st_set_dimensions('geometry', names = 'month')
+      mean_arr <- array(NA_real_, dim = c(n_geom, n_months))
+      sd_arr   <- array(NA_real_, dim = c(n_geom, n_months))
+      for (m in seq_along(month_levels)) {
+        idx <- which(months == month_levels[m])
+        mean_arr[, m] <- rowMeans(mat[, idx, drop = FALSE], na.rm = TRUE)
+        sd_arr[, m]   <- apply(mat[, idx, drop = FALSE], 1, sd, na.rm = TRUE)
+      }
+
+      # Build result from template: take first n_months time slices, rename dim to month
+      template <- dat[, , seq_len(n_months), drop = FALSE]
+      mean_result <- template
+      mean_result[[1]] <- mean_arr
+      mean_result <- st_set_dimensions(mean_result, 'time',
+                                       values = month_levels, names = 'month')
+      sd_result <- template
+      sd_result[[1]] <- sd_arr
+      sd_result <- st_set_dimensions(sd_result, 'time',
+                                     values = month_levels, names = 'month')
+    } else {
+      # For raster: use aggregate() with workaround for stars naming bug
+      # NOTE: stars::aggregate with factor-returning grouping functions causes
+      # the new dimension to be named 'geometry' instead of 'time'. We rename after.
+      mean_result <- aggregate(dat, by_months, FUN = mean) %>%
+        aperm(c(2, 3, 1)) %>%
+        st_set_dimensions('geometry', names = 'month')
+
+      sd_result <- aggregate(dat, by_months, FUN = sd) %>%
+        aperm(c(2, 3, 1)) %>%
+        st_set_dimensions('geometry', names = 'month')
+    }
   } else {
     # Annual climatology calculation
     spatial_dims <- get_spatial_dimensions(dat)
@@ -117,18 +137,40 @@ get_anomalies <- function(dat, clim = NULL, scale = FALSE, monthly = FALSE) {
     # Get the actual months in the data
     month_names <- unique(format(times, "%B"))
 
-    # Redimension to monthly structure and calculate anomalies
-    # FIXME: Three issues with monthly path:
-    # 1. Hardcoded x, y dimension names — breaks for lon/lat/easting/northing.
-    #    Should use get_spatial_dimensions() like the rest of the package.
-    # 2. Hardcoded month = 12 assumes monthly data — sub-monthly or seasonal
-    #    data will silently produce wrong results. No validation.
-    # 3. Will break for sf-based stars with geometry dimension.
-    dat <- st_redimension(dat,
-                                c(x = dims[[1]],
-                                  y = dims[[2]],
-                                  month = 12,
-                                  year = dims[[3]] / 12)) |>
+    if (has_geometry_dimension(dat)) {
+      # Geometry path: direct array manipulation
+      # NOTE (pre-existing): month_idx assumes clim month ordering matches
+      # month_names from dat. If clim was computed from data with a different
+      # start month (e.g., July-start clim applied to January-start dat),
+      # the column indices will be wrong. The raster path has the same
+      # assumption via st_redimension. Fix would be to index by month name.
+      mat <- dat[[1]]  # geometry × time
+      mn_mat <- mn[[1]]  # geometry × month
+      sd_mat <- stdev[[1]]  # geometry × month
+      month_idx <- match(format(times, "%B"), month_names)
+
+      for (t in seq_len(n_times)) {
+        m <- month_idx[t]
+        mat[, t] <- mat[, t] - mn_mat[, m]
+        if (scale) mat[, t] <- mat[, t] / sd_mat[, m]
+      }
+
+      out <- dat
+      out[[1]] <- mat
+      return(out)
+    }
+
+    # Raster path: redimension to monthly structure
+    # NOTE (pre-existing, cosmetic): st_redimension sets names() on the
+    # underlying array's dim attribute, so a roundtrip through redimension
+    # can change dim names on dat[[1]] (e.g., X1/X2/X3 -> x/y/time).
+    # Values are unaffected; only array metadata differs.
+    spatial_dims <- get_spatial_dimensions(dat)
+    redim_spec <- stats::setNames(
+      c(dims[spatial_dims], month = 12L, year = as.integer(dims[["time"]] / 12)),
+      c(spatial_dims, "month", "year")
+    )
+    dat <- st_redimension(dat, redim_spec) |>
       st_set_dimensions('month', values = month_names)
   }
 
@@ -139,11 +181,12 @@ get_anomalies <- function(dat, clim = NULL, scale = FALSE, monthly = FALSE) {
     }
 
     if(monthly) {
-      # Restore original time dimension
-      out <- st_redimension(out,
-                            c(x = dims[[1]],
-                              y = dims[[2]],
-                              time = dims[[3]])) |>
+      # Restore original time dimension (spatial_dims captured before redimension)
+      redim_spec <- stats::setNames(
+        c(dims[spatial_dims], time = dims[["time"]]),
+        c(spatial_dims, "time")
+      )
+      out <- st_redimension(out, redim_spec) |>
         st_set_dimensions('time', values = times)
     }
 
@@ -189,14 +232,35 @@ restore_climatology <- function(anomalies, clim, scale = FALSE, monthly = FALSE)
     # Get the actual months in the data
     month_names <- unique(format(times, "%B"))
 
-    # Redimension to monthly structure
-    # FIXME: Same issues as get_anomalies() — hardcoded x/y, assumes monthly,
-    # breaks for sf geometry. Fix all three together.
-    anomalies <- st_redimension(anomalies,
-                                 c(x = dims[[1]],
-                                   y = dims[[2]],
-                                   month = 12,
-                                   year = dims[[3]] / 12)) |>
+    if (has_geometry_dimension(anomalies)) {
+      # Geometry path: direct array manipulation (reverse of get_anomalies)
+      # NOTE (pre-existing): same month-ordering assumption as get_anomalies —
+      # clim must have been computed from data with the same start month.
+      mat <- anomalies[[1]]  # geometry × time
+      mn_mat <- target_mean[[1]]  # geometry × month
+      sd_mat <- target_sd[[1]]  # geometry × month
+      month_idx <- match(format(times, "%B"), month_names)
+
+      for (t in seq_len(n_times)) {
+        m <- month_idx[t]
+        if (scale) mat[, t] <- mat[, t] * sd_mat[, m]
+        mat[, t] <- mat[, t] + mn_mat[, m]
+      }
+
+      out <- anomalies
+      out[[1]] <- mat
+      # Restore units and return early
+      out <- restore_units(out, clim$mean)
+      return(out)
+    }
+
+    # Raster path: redimension to monthly structure
+    spatial_dims <- get_spatial_dimensions(anomalies)
+    redim_spec <- stats::setNames(
+      c(dims[spatial_dims], month = 12L, year = as.integer(dims[["time"]] / 12)),
+      c(spatial_dims, "month", "year")
+    )
+    anomalies <- st_redimension(anomalies, redim_spec) |>
       st_set_dimensions('month', values = month_names)
   }
     # Restore climatology
@@ -206,13 +270,12 @@ restore_climatology <- function(anomalies, clim, scale = FALSE, monthly = FALSE)
     out <- anomalies + target_mean
 
     if(monthly) {
-      # Restore original time dimension
-      # FIXME: Same issues as get_anomalies() — hardcoded x/y, assumes monthly,
-      # breaks for sf geometry. Fix all three together.
-      out <- st_redimension(out,
-                            c(x = dims[[1]],
-                              y = dims[[2]],
-                              time = dims[[3]])) |>
+      # Restore original time dimension (spatial_dims captured before redimension)
+      redim_spec <- stats::setNames(
+        c(dims[spatial_dims], time = dims[["time"]]),
+        c(spatial_dims, "time")
+      )
+      out <- st_redimension(out, redim_spec) |>
         st_set_dimensions('time', values = times)
     }
 

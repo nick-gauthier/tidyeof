@@ -169,10 +169,15 @@ plot_canonical_patterns <- function(x, side = "both", k = NULL, scaled = FALSE) 
 
     if (scaled) {
       # Scale each CV to unit variance
+      is_geom <- has_geometry_dimension(plot_data)
       for (i in seq_len(k)) {
-        cv_name <- paste0("CV", i)
-        vals <- plot_data[[1]][,,i]
-        plot_data[[1]][,,i] <- vals / max(abs(vals), na.rm = TRUE)
+        if (is_geom) {
+          vals <- plot_data[[1]][, i]
+          plot_data[[1]][, i] <- vals / max(abs(vals), na.rm = TRUE)
+        } else {
+          vals <- plot_data[[1]][,, i]
+          plot_data[[1]][,, i] <- vals / max(abs(vals), na.rm = TRUE)
+        }
       }
     }
 
