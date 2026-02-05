@@ -48,7 +48,7 @@ plot_amps <- function(patterns,
 
 #' Scree plot for EOF patterns
 #'
-#' @param x A patterns object from get_patterns()
+#' @param x A patterns object from patterns()
 #' @param k Optional number of components to highlight with vertical line
 #' @param kmax Maximum number of components to show (default 10)
 #' @param ... Additional arguments (currently unused)
@@ -56,9 +56,9 @@ plot_amps <- function(patterns,
 #' @export
 #' @examples
 #' \dontrun{
-#' patterns <- get_patterns(data, k = 5)
-#' screeplot(patterns)
-#' screeplot(patterns, k = 3, kmax = 8)
+#' pat <- patterns(data, k = 5)
+#' screeplot(pat)
+#' screeplot(pat, k = 3, kmax = 8)
 #' }
 screeplot.patterns <- function(x, k = NULL, kmax = 10, ...) {
   x$eigenvalues %>%
@@ -87,18 +87,18 @@ screeplot.patterns <- function(x, k = NULL, kmax = 10, ...) {
 #' @param weight Weighting option
 #' @export
 #' @details
-#' \strong{This function is deprecated.} Use \code{screeplot(patterns)} instead
-#' where patterns is the result of \code{get_patterns()}.
+#' \strong{This function is deprecated.} Use \code{screeplot(pat)} instead
+#' where pat is the result of \code{patterns()}.
 plot_scree <- function(dat, k = NULL, kmax = 10, scale = FALSE, monthly = FALSE, weight = TRUE) {
   .Deprecated("screeplot.patterns", package = "tidyEOF",
-              msg = "plot_scree() is deprecated. Use screeplot(get_patterns(dat, ...)) instead.")
+              msg = "plot_scree() is deprecated. Use screeplot(patterns(dat, ...)) instead.")
 
   # For backward compatibility, try to create patterns and call new method
   tryCatch({
-    patterns <- get_patterns(dat, k = if(is.null(k)) 5 else k, scale = scale, monthly = monthly, weight = weight)
-    screeplot.patterns(patterns, k = k, kmax = kmax)
+    pat <- patterns(dat, k = if(is.null(k)) 5 else k, scale = scale, monthly = monthly, weight = weight)
+    screeplot.patterns(pat, k = k, kmax = kmax)
   }, error = function(e) {
-    stop("plot_scree() is deprecated and could not convert to new interface. Use screeplot(get_patterns(dat, ...)) instead.")
+    stop("plot_scree() is deprecated and could not convert to new interface. Use screeplot(patterns(dat, ...)) instead.")
   })
 }
 

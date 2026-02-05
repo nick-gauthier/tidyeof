@@ -14,10 +14,10 @@
 #' @examples
 #' \dontrun{
 #' # Get patterns from training data
-#' patterns <- get_patterns(training_data, k = 5)
+#' pat <- patterns(training_data, k = 5)
 #'
 #' # Project new data onto these patterns
-#' new_amplitudes <- project_patterns(patterns, new_data)
+#' new_amplitudes <- project_patterns(pat, new_data)
 #' }
 project_patterns <- function(patterns, newdata) {
   # NOTE: No spatial compatibility validation currently performed.
@@ -77,7 +77,7 @@ project_patterns <- function(patterns, newdata) {
     cli::cli_abort(c(
       "Patterns object is missing {.field proj_matrix}.",
       "i" = "This patterns object may have been created with an older version of tidyEOF.",
-      "i" = "Please regenerate it using {.fn get_patterns}."
+      "i" = "Please regenerate it using {.fn patterns}."
     ))
   }
 

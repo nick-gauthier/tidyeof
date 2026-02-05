@@ -33,10 +33,10 @@ prep_folds <- function(times, kfolds = 5){
 #' @param k_preds Number of predictor PCs to retain
 #' @param k_obs Number of response PCs to retain
 #' @param kfolds Number of cross-validation folds (default 5)
-#' @param scale Passed to get_patterns()
-#' @param rotate Passed to get_patterns()
-#' @param monthly Passed to get_patterns()
-#' @param weight Passed to get_patterns()
+#' @param scale Passed to patterns()
+#' @param rotate Passed to patterns()
+#' @param monthly Passed to patterns()
+#' @param weight Passed to patterns()
 #'
 #' @return Tibble with train_obs, train_preds, and test columns for each fold
 #' @export
@@ -52,10 +52,10 @@ prep_cca <- function(preds, obs, k_preds, k_obs, kfolds = 5, scale = FALSE, rota
 
   # preprocess the training data for each fold
   train_obs <- purrr::map(folds, ~ filter(obs, !(time %in% .))  %>%
-                            get_patterns(k = k_obs, scale = scale, rotate = rotate, monthly = monthly, weight = weight))
+                            patterns(k = k_obs, scale = scale, rotate = rotate, monthly = monthly, weight = weight))
 
   train_preds <- purrr::map(folds, ~ filter(preds, !(time %in% .)) %>%
-                              get_patterns(k = k_preds, scale = scale, rotate = rotate, monthly = monthly, weight = weight))
+                              patterns(k = k_preds, scale = scale, rotate = rotate, monthly = monthly, weight = weight))
 
   # preprocess test data for each fold
   test <- purrr::map(folds, ~ filter(preds, time %in% .))

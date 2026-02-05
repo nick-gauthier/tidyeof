@@ -5,7 +5,7 @@
 #' raster field and the PC amplitudes.
 #'
 #' @param dat A stars object with a time dimension
-#' @param patterns A patterns object from get_patterns()
+#' @param patterns A patterns object from patterns()
 #' @param amplitudes Optional amplitudes tibble (defaults to patterns$amplitudes)
 #'
 #' @return A stars object with correlation values for each PC
@@ -38,7 +38,7 @@ get_correlation <- function(dat, patterns, amplitudes = NULL) {
 #' contour lines as sf polygons.
 #'
 #' @param dat A stars object with a time dimension
-#' @param patterns A patterns object from get_patterns()
+#' @param patterns A patterns object from patterns()
 #' @param fdr False discovery rate threshold (default 0.1)
 #' @param amplitudes Optional amplitudes tibble (defaults to patterns$amplitudes)
 #'

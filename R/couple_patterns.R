@@ -4,8 +4,8 @@
 #' as the primary method. CCA finds linear combinations of predictor and response patterns that
 #' maximize correlation between them.
 #'
-#' @param predictor_patterns A patterns object containing predictor patterns (e.g., from get_patterns())
-#' @param response_patterns A patterns object containing response patterns (e.g., from get_patterns())
+#' @param predictor_patterns A patterns object containing predictor patterns (e.g., from patterns())
+#' @param response_patterns A patterns object containing response patterns (e.g., from patterns())
 #' @param k Number of CCA modes to retain. If NULL, uses min(ncol(predictor), ncol(response))
 #' @param method Coupling method. Currently only "cca" is supported
 #' @param center Logical, whether to center the data before CCA (default: FALSE)
@@ -23,17 +23,17 @@
 #' @examples
 #' \dontrun{
 #' # Get patterns from your data
-#' pred_patterns <- get_patterns(predictor_data, k = 5)
-#' resp_patterns <- get_patterns(response_data, k = 5)
+#' pred_patterns <- patterns(predictor_data, k = 5)
+#' resp_patterns <- patterns(response_data, k = 5)
 #'
 #' # Couple the patterns
-#' coupled <- couple_patterns(pred_patterns, resp_patterns, k = 3)
+#' coupled <- couple(pred_patterns, resp_patterns, k = 3)
 #'
 #' # Make predictions
 #' predictions <- predict(coupled, new_predictor_data)
 #' }
-couple_patterns <- function(predictor_patterns, response_patterns, k = NULL,
-                           method = "cca", center = FALSE, validate = TRUE) {
+couple <- function(predictor_patterns, response_patterns, k = NULL,
+                  method = "cca", center = FALSE, validate = TRUE) {
 
   # Validate inputs and get common times
   common_times <- if (validate) {

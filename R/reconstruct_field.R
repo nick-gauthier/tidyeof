@@ -44,7 +44,7 @@ should_be_nonnegative <- function(patterns) {
 #'
 #' @return A stars object with reconstructed spatial-temporal data
 #' @export
-reconstruct_field <- function(target_patterns, amplitudes = NULL, nonneg = "auto") {
+reconstruct <- function(target_patterns, amplitudes = NULL, nonneg = "auto") {
   validate_patterns(target_patterns)
 
   if(is.null(amplitudes)) amplitudes <- target_patterns$amplitudes

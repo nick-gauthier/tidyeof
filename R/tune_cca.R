@@ -83,10 +83,10 @@ prep_cv_folds <- function(predictor, response,
     test_resp <- dplyr::filter(response, time %in% test_times)
 
     # Compute patterns at max_k (expensive, but only done once per fold)
-    train_pred_patterns <- get_patterns(train_pred, k = max_k_pred,
+    train_pred_patterns <- patterns(train_pred, k = max_k_pred,
                                         scale = scale, rotate = rotate,
                                         monthly = monthly, weight = weight)
-    train_resp_patterns <- get_patterns(train_resp, k = max_k_resp,
+    train_resp_patterns <- patterns(train_resp, k = max_k_resp,
                                         scale = scale, rotate = rotate,
                                         monthly = monthly, weight = weight)
 
@@ -263,7 +263,7 @@ evaluate_fold <- function(fold, k_pred, k_resp, k_cca, metrics, nonneg) {
   resp_patterns <- fold$train_resp_patterns[1:k_resp]
 
   # Couple patterns with CCA
-  coupled <- couple_patterns(pred_patterns, resp_patterns, k = k_cca, validate = FALSE)
+  coupled <- couple(pred_patterns, resp_patterns, k = k_cca, validate = FALSE)
 
   # Predict on test data
   predicted <- predict(coupled, fold$test_pred_data, nonneg = nonneg)
@@ -380,7 +380,7 @@ print.cv_folds <- function(x, ...) {
 #' @export
 #'
 #' @examples
-#' \dontrun
+#' \dontrun{
 #' # Find optimal k for precipitation field
 #' results <- tune_eof(precip_data, k = 1:15, kfolds = 5)
 #' summary <- summarize_eof_cv(results, metric = "rmse")
@@ -420,7 +420,7 @@ tune_eof <- function(data,
     train_data <- dplyr::filter(data, !(time %in% test_times))
     test_data <- dplyr::filter(data, time %in% test_times)
 
-    train_patterns <- get_patterns(train_data, k = max_k,
+    train_patterns <- patterns(train_data, k = max_k,
                                    scale = scale, rotate = FALSE,
                                    monthly = monthly, weight = weight)
 
@@ -467,7 +467,7 @@ evaluate_eof_fold <- function(fold, k, metrics, nonneg) {
   patterns_k <- fold$train_patterns[1:k]
 
   # Project test data and reconstruct
-  reconstructed <- reconstruct_field(patterns_k,
+  reconstructed <- reconstruct(patterns_k,
                                      amplitudes = fold$test_data,
                                      nonneg = nonneg)
 

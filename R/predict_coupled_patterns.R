@@ -1,9 +1,9 @@
 #' Predict Method for Coupled Patterns
 #'
-#' This function makes predictions using a coupled_patterns object created by couple_patterns().
+#' This function makes predictions using a coupled_patterns object created by couple().
 #' It applies the learned CCA relationship to new predictor data to predict response patterns.
 #'
-#' @param object A coupled_patterns object from couple_patterns()
+#' @param object A coupled_patterns object from couple()
 #' @param newdata New predictor data (stars object) for making predictions
 #' @param k Number of CCA modes to use for prediction. If NULL, uses all available modes
 #' @param reconstruct Logical, whether to reconstruct the full spatial field (default: TRUE)
@@ -18,7 +18,7 @@
 #' @examples
 #' \dontrun{
 #' # Create coupled patterns
-#' coupled <- couple_patterns(pred_patterns, resp_patterns, k = 3)
+#' coupled <- couple(pred_patterns, resp_patterns, k = 3)
 #'
 #' # Make predictions on new data
 #' predictions <- predict(coupled, new_predictor_data)
@@ -32,7 +32,7 @@ predict.coupled_patterns <- function(object, newdata, k = NULL, reconstruct = TR
 
   # Validate inputs
   if (!inherits(object, "coupled_patterns")) {
-    cli::cli_abort("object must be a coupled_patterns object from couple_patterns()",
+    cli::cli_abort("object must be a coupled_patterns object from couple()",
                    class = "tidyEOF_invalid_input")
   }
 
@@ -67,7 +67,7 @@ predict.coupled_patterns <- function(object, newdata, k = NULL, reconstruct = TR
   }
 
   # Reconstruct spatial field
-  reconstructed <- reconstruct_field(
+  reconstructed <- reconstruct(
     target_patterns = object$response_patterns,
     amplitudes = predicted_amplitudes,
     nonneg = nonneg
@@ -226,7 +226,7 @@ get_canonical_variables <- function(object, data, type = c("predictor", "respons
 #'
 #' @examples
 #' \dontrun{
-#' coupled <- couple_patterns(pred_patterns, resp_patterns, k = 3)
+#' coupled <- couple(pred_patterns, resp_patterns, k = 3)
 #'
 #' # Get canonical patterns for response side
 #' resp_canonical <- get_canonical_patterns(coupled, type = "response")

@@ -4,7 +4,7 @@
 #' of both the spatial pattern and corresponding amplitude time series when needed.
 #' This makes plotting and interpretation more consistent across analyses.
 #'
-#' @param patterns A patterns object from get_patterns()
+#' @param patterns A patterns object from patterns()
 #' @return The patterns object with signs adjusted for consistency
 #' @keywords internal
 flip_patterns <- function(patterns) {
