@@ -48,6 +48,16 @@ project_patterns <- function(patterns, newdata) {
   } else {
     seq_len(ncol(data_matrix))
   }
+
+  # Check that valid_pixels indices are within bounds
+  if (max(valid_pixels) > ncol(data_matrix)) {
+    cli::cli_abort(c(
+      "valid_pixels indices exceed newdata dimensions.",
+      "x" = "max(valid_pixels) = {max(valid_pixels)}, but newdata has only {ncol(data_matrix)} spatial columns.",
+      "i" = "This suggests train and test data have different spatial extents."
+    ))
+  }
+
   data_matrix <- data_matrix[, valid_pixels, drop = FALSE]
 
   complete_rows <- stats::complete.cases(data_matrix)
@@ -62,13 +72,34 @@ project_patterns <- function(patterns, newdata) {
     cli::cli_abort("No complete time steps available after removing missing values in `newdata`.")
   }
 
-  rotation_names <- rownames(patterns$pca$rotation)
-  if (!is.null(rotation_names)) {
-    colnames(data_matrix) <- rotation_names
+  # Check dimension compatibility
+  expected_cols <- nrow(patterns$pca$rotation)
+  if (ncol(data_matrix) != expected_cols) {
+    cli::cli_abort(c(
+      "Spatial dimension mismatch between patterns and newdata.",
+      "x" = "Patterns expect {expected_cols} spatial pixels, but newdata has {ncol(data_matrix)}.",
+      "i" = "This can happen if newdata has a different spatial extent or NA pattern."
+    ))
   }
 
-  projected <- predict(patterns$pca, data_matrix) %>%
-    .[, 1:patterns$k, drop = FALSE]
+  # Manual projection instead of predict.prcomp (more robust with IRLBA)
+  # Center the data using training means
+  if (!identical(patterns$pca$center, FALSE) && !is.null(patterns$pca$center)) {
+    data_matrix <- sweep(data_matrix, 2, patterns$pca$center, "-")
+  }
+
+  # Scale if PCA was fit with scaling
+
+  if (!identical(patterns$pca$scale, FALSE) && !is.null(patterns$pca$scale)) {
+    data_matrix <- sweep(data_matrix, 2, patterns$pca$scale, "/")
+  }
+
+  # Project onto rotation matrix (loadings)
+  # rotation has shape (n_pixels x n_components)
+  # data_matrix has shape (n_times x n_pixels)
+  # result has shape (n_times x n_components)
+  n_components <- min(patterns$k, ncol(patterns$pca$rotation))
+  projected <- data_matrix %*% patterns$pca$rotation[, 1:n_components, drop = FALSE]
 
   # Apply rotation if present
   if (is.matrix(patterns$rotation)) {
