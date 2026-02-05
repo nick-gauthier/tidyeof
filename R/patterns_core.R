@@ -235,8 +235,7 @@ get_eofs <- function(dat, k, rotate = FALSE, irlba_threshold, weights = NULL) {
 
   # Calculate eigenvalues - always use original unrotated values for scree plot
   n <- length(pca_result$sdev)
-  eigenvalues <- pca_result |>
-    broom::tidy(matrix = 'pcs') |>
+  eigenvalues <- tidy_pca_sdev(pca_result) |>
     mutate(eigenvalues = std.dev ^ 2,
            percent = percent * 100,
            cumulative = cumulative * 100,
@@ -335,6 +334,28 @@ area_weights <- function(dat) {
   # Normalize by mean area and take sqrt
   # sqrt so the covariance matrix is weighted by area
   sqrt(area_values / mean(area_values, na.rm = TRUE))
+}
+
+#' Tidy PCA standard deviations into a tibble
+#'
+#' Replaces `broom::tidy(pca, matrix = "pcs")` with a dependency-free version.
+#' Returns a tibble with columns PC, std.dev, percent, cumulative — identical
+#' to the broom output.
+#'
+#' @param pca_result A prcomp (or prcomp_irlba) result
+#' @return Tibble with PC, std.dev, percent, cumulative
+#' @keywords internal
+tidy_pca_sdev <- function(pca_result) {
+  sdev <- pca_result$sdev
+  variance <- sdev^2
+  total_var <- sum(variance)
+  pct <- variance / total_var
+  tibble::tibble(
+    PC = seq_along(sdev),
+    std.dev = sdev,
+    percent = pct,
+    cumulative = cumsum(pct)
+  )
 }
 
 # from tidymodels/recipes

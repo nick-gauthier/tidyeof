@@ -209,8 +209,7 @@ common_patterns <- function(datasets, k = 4, scale = TRUE, rotate = FALSE,
 
   # --- Build eigenvalues tibble ---
   n_total <- length(pca_result$sdev)
-  eigenvalues <- pca_result |>
-    broom::tidy(matrix = 'pcs') |>
+  eigenvalues <- tidy_pca_sdev(pca_result) |>
     mutate(eigenvalues = std.dev ^ 2,
            percent = percent * 100,
            cumulative = cumulative * 100,

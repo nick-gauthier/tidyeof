@@ -116,7 +116,7 @@ get_anomalies <- function(dat, clim = NULL, scale = FALSE, monthly = FALSE) {
     }
 
     # Get the actual months in the data
-    month_names <- as.character(unique(lubridate::month(times, label = TRUE, abbr = FALSE)))
+    month_names <- unique(format(times, "%B"))
 
     # Redimension to monthly structure and calculate anomalies
     # NOTE: Hardcoded x, y dimension names assume raster-based stars.
@@ -184,7 +184,7 @@ restore_climatology <- function(anomalies, clim, scale = FALSE, monthly = FALSE)
     }
 
     # Get the actual months in the data
-    month_names <- as.character(unique(lubridate::month(times, label = TRUE, abbr = FALSE)))
+    month_names <- unique(format(times, "%B"))
 
     # Redimension to monthly structure
     # NOTE: Hardcoded x, y dimension names assume raster-based stars.
@@ -222,7 +222,7 @@ restore_climatology <- function(anomalies, clim, scale = FALSE, monthly = FALSE)
 # convenience function for monthly aggregation, based on example in aggregate.stars
 # In get_climatology:
 by_months <- function(x) {
-  mon <- lubridate::month(x, label = TRUE, abbr = FALSE)
+  mon <- format(x, "%B")
   factor(mon, levels = unique(mon))  # Preserve order from data
 }
 

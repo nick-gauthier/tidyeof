@@ -1,4 +1,4 @@
-#' @import stars dplyr broom tidyr stringr methods
+#' @import stars dplyr tidyr
 #' @importFrom sf st_crs
 #' @importFrom ggplot2 ggplot aes geom_line geom_hline geom_vline geom_col facet_wrap scale_fill_distiller coord_quickmap coord_sf theme_void theme_bw labs theme element_text unit margin
 #' @importFrom scico scale_fill_scico

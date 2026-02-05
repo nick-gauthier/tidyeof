@@ -114,7 +114,7 @@ plot.coupled_patterns <- function(x,
         ggplot2::labs(
           x = NULL,
           y = "Canonical variate",
-          title = glue::glue("{stringr::str_to_title(side)} canonical variates")
+          title = glue::glue("{tools::toTitleCase(side)} canonical variates")
         ) +
         ggplot2::theme_bw()
     }
@@ -214,6 +214,6 @@ plot_canonical_patterns <- function(x, side = "both", k = NULL, scaled = FALSE) 
 
   # Single side
   canon_patterns <- get_canonical_patterns(x, type = side, k = k)
-  title_prefix <- stringr::str_to_title(side)
+  title_prefix <- tools::toTitleCase(side)
   make_single_plot(canon_patterns, title_prefix, if (side == "predictor") "#4C9F38" else "#E17D30")
 }

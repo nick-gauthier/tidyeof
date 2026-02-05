@@ -48,7 +48,7 @@ reconstruct <- function(target_patterns, amplitudes = NULL, nonneg = "auto") {
   validate_patterns(target_patterns)
 
   if(is.null(amplitudes)) amplitudes <- target_patterns$amplitudes
-  if(is(amplitudes, 'stars')) amplitudes <- project_patterns(target_patterns, amplitudes)
+  if(inherits(amplitudes, 'stars')) amplitudes <- project_patterns(target_patterns, amplitudes)
 
   # Auto-detect whether to apply non-negative constraint
   if(nonneg == "auto") {
