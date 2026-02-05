@@ -1,0 +1,243 @@
+---
+title: "Introduction to tidyeof"
+format: html
+editor: visual
+---
+
+## Overview
+
+The `tidyeof` package provides tools for analyzing spatiotemporal climate data using Empirical Orthogonal Functions (EOFs), also known as Principal Component Analysis (PCA). This vignette will:
+
+1.  Introduce the concept of EOF analysis
+2.  Demonstrate how to use the package
+3.  Show how to interpret and validate results
+4.  Provide examples of common analysis workflows
+
+## What are EOFs?
+
+EOFs are a powerful technique for analyzing spatiotemporal climate data. They help us identify dominant spatial patterns of variability and how these patterns evolve over time. Mathematically, EOFs decompose a spatiotemporal field into:
+
+1.  Spatial patterns (EOFs or loading patterns)
+2.  Time series (Principal Components or pattern amplitudes)
+3.  Explained variance (eigenvalues)
+
+Consider a temperature anomaly field over North America. An EOF analysis might reveal that: - The first EOF shows a continent-wide warming/cooling pattern - The second EOF might show a dipole between east and west - Each pattern has an associated time series showing when it was active - The eigenvalues tell us how much of the total variance each pattern explains
+
+## Getting Started
+
+First, let's load the package and some example data:
+
+```{r}
+library(tidyeof)
+library(stars)
+library(tidyverse)
+library(ggplot2)
+
+# Load example data (monthly temperature anomalies)
+temp_anomalies <- system.file('testdata/prism_test.RDS', package = 'tidyeof') |>
+  readRDS()
+```
+
+## Basic EOF Analysis
+
+The main function is `patterns()`:
+
+```{r}
+pat <- patterns(temp_anomalies, k = 3) # k selects number of patterns
+```
+
+The resulting `patterns` object contains: - Spatial patterns (`pat$eofs`) - Time series (`pat$amplitudes`) - Explained variance (`pat$eigenvalues`) - Processing metadata
+
+```{r}
+get_climatology(temp_anomalies) |> plot()
+
+get_climatology(temp_anomalies, monthly = TRUE) |> plot()
+```
+
+## Visualizing Results
+
+The package provides several plotting methods:
+
+```{r}
+plot(pat)
+```
+
+```{r}
+screeplot(pat)
+```
+
+```{r}
+patterns(temp_anomalies, k = 3, rotate = TRUE, scale = TRUE) |> plot()
+```
+
+```{r}
+patterns(temp_anomalies, k = 3, rotate = TRUE) |> plot()
+```
+
+```{r}
+p1 <- plot(pat, 'eofs') + facet_wrap(~PC, nrow = 1) + theme_minimal() + labs(x='', y='')
+p2 <- plot(pat, 'amplitudes') + facet_wrap(~PC, nrow = 1)
+(p1) / (p2) + plot_layout(heights = c(5, 1), guides = 'collect')
+
+(p1) + (p2) + plot_layout(heights = c(5, 1), guides = 'collect')
+```
+
+```{r}
+p3 <- plot(pat, 'eofs') + facet_wrap(~PC, ncol = 1) + labs(x='', y='')
+p4 <- plot(pat, 'amplitudes') + facet_wrap(~PC, ncol = 1)
+(p3) | (p4) + plot_layout(widths = c(10, 1), guides = 'collect')
+
+```
+
+```{r}
+# Plot spatial patterns and amplitudes
+plot(pat)
+```
+
+## Understanding the Output
+
+Let's break down what each component means:
+
+### Spatial Patterns (EOFs)
+
+```{r}
+pat
+# Look at first EOF
+pat$eofs  # Using $ method
+pat[1]    # Using [ method
+plot(pat$eofs)
+
+pat$eofs
+plot(pat[3])
+```
+
+The EOF patterns show spatial loadings where: - Red areas move together in one direction - Blue areas move together in the opposite direction - Darker colors indicate stronger relationships - White areas have little relationship with the pattern
+
+### Time Series (PCs)
+
+```{r}
+# Extract PC time series
+pat$amplitudes
+
+# Plot amplitudes
+plot(pat, type = "amplitudes")
+```
+
+The time series show:
+
+-   When each pattern was active (positive values)
+-   When it was in its opposite phase (negative values)
+-   The magnitude of the pattern at each time
+
+### Explained Variance
+
+```{r}
+summary(pat)
+```
+
+This shows:
+
+-   How much variance each pattern explains
+
+-   Cumulative variance explained
+
+-   Statistical significance of patterns
+
+## Advanced Topics
+
+### Rotation
+
+EOF patterns are mathematically constrained to be orthogonal, which may not reflect physical reality. Rotation can help find more physically interpretable patterns:
+
+```{r}
+rotated_pat <- patterns(temp_anomalies,
+                        k = 4,
+                        rotate = TRUE)
+
+plot(rotated_pat)
+```
+
+### Pattern Significance
+
+Not all patterns are statistically significant. We can test significance using: - North's Rule of Thumb - Monte Carlo methods - The scree plot
+
+### Latitude Weighting
+
+For global analyses, grid cells have different areas at different latitudes. The `weight` parameter applies area weighting to account for this.
+
+## Common Workflows
+
+### Finding Dominant Patterns
+
+```{r}
+# Get patterns, keeping enough to explain 90% of variance
+var_explained <- cumsum(pat$eigenvalues$variance) /
+                 sum(pat$eigenvalues$variance)
+k_needed <- which(var_explained > 0.9)[1]
+
+dominant_pat <- patterns(temp_anomalies, k = k_needed)
+```
+
+### Seasonal Analysis
+
+```{r}
+# Get patterns with monthly climatology
+seasonal_pat <- patterns(temp_anomalies, monthly = TRUE)
+
+# Look at winter patterns
+winter_months <- pat$amplitudes$time |>
+  lubridate::month() %in% c(12, 1, 2)
+winter_amplitudes <- pat$amplitudes[winter_months, ]
+```
+
+### Pattern Reconstruction
+
+```{r}
+# Reconstruct field using patterns
+reconstructed <- reconstruct(pat)
+
+# Calculate reconstruction error
+error <- temp_anomalies - reconstructed
+```
+
+## Best Practices
+
+1.  **Data Preparation**
+    -   Remove seasonal cycle if not studying seasonal patterns
+    -   Consider whether to standardize the field
+    -   Check for and handle missing values
+2.  **Pattern Selection**
+    -   Use scree plot to guide pattern retention
+    -   Consider physical interpretability
+    -   Test pattern significance
+3.  **Interpretation**
+    -   Compare patterns to known physical modes
+    -   Consider the timescales of variability
+    -   Remember patterns are statistical constructs
+
+## Common Issues
+
+1.  **Scale Mixing**
+    -   EOFs can mix processes operating at different scales
+    -   Consider scale separation techniques if needed
+2.  **Domain Dependence**
+    -   Patterns depend on domain choice
+    -   Choose domain based on physical understanding
+3.  **Orthogonality Constraint**
+    -   Patterns are mathematically, not physically, constrained
+    -   Consider rotation for physical interpretation
+
+## References
+
+For more information on EOF/PCA analysis in climate science:
+
+1.  Wilks, D.S. (2011). Statistical Methods in the Atmospheric Sciences
+2.  von Storch, H. & Zwiers, F.W. (1999). Statistical Analysis in Climate Research
+3.  Hannachi, A., et al. (2007). Pattern hunting in climate: a new method...
+
+## Next Steps
+
+-   Try the examples with your own data
+-   Explore advanced options like rotation
+-   Check the function documentation for details
+-   See the package website for more examples

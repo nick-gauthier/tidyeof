@@ -13,25 +13,15 @@
 get_correlation <- function(dat, patterns, amplitudes = NULL) {
   if(is.null(amplitudes)) amplitudes <- patterns$amplitudes
 
-  times_amps <- amplitudes$time
-  times_dat <- st_get_dimension_values(dat, 'time')
-  # Use subsetting to preserve Date/POSIXct class (intersect can strip it)
-  times_cor <- times_amps[times_amps %in% times_dat]
-
-  if(length(times_cor) <= 0) cli::cli_abort("Need at least two time steps in common.")
-  if(!(identical(times_cor, times_amps) & identical(times_cor, times_dat))) cli::cli_inform("Using the time period {first(times_cor)} to {last(times_cor)}.")
-
-  amps <- filter(amplitudes, time %in% times_cor) %>%
-    select(-time)
+  matched <- match_times(amplitudes, dat)
 
   # FIXME: aperm(c(2,3,1)) assumes 3D raster (x, y, PC). Will break for
-
   # sf geometry-based stars objects where the array is 2D (geometry, PC).
   suppressWarnings( # suppress warnings that sd is zero
-  filter(dat, time %in% times_cor) %>%
-  st_apply(get_spatial_dimensions(.), function(x) cor(x, amps), .fname = 'PC') %>%
-    st_set_dimensions(., 'PC', values = paste0('PC', st_get_dimension_values(., 'PC'))) %>%
-    aperm(c(2,3,1))
+    filter(dat, time %in% matched$times) %>%
+      st_apply(get_spatial_dimensions(.), function(x) cor(x, matched$amps), .fname = 'PC') %>%
+      st_set_dimensions(., 'PC', values = paste0('PC', st_get_dimension_values(., 'PC'))) %>%
+      aperm(c(2,3,1))
   )
 }
 
@@ -50,21 +40,12 @@ get_correlation <- function(dat, patterns, amplitudes = NULL) {
 get_fdr <- function(dat, patterns, fdr = 0.1, amplitudes = NULL) {
   if(is.null(amplitudes)) amplitudes <- patterns$amplitudes
 
-  times_amps <- amplitudes$time
-  times_dat <- st_get_dimension_values(dat, 'time')
-  # Use subsetting to preserve Date/POSIXct class (intersect can strip it)
-  times_cor <- times_amps[times_amps %in% times_dat]
-
-  if(length(times_cor) <= 0) cli::cli_abort("Need at least two time steps in common.")
-  if(!(identical(times_cor, times_amps) & identical(times_cor, times_dat))) cli::cli_inform("Using the time period {first(times_cor)} to {last(times_cor)}.")
-
-  amps <- filter(amplitudes, time %in% times_cor) %>%
-    select(-time)
+  matched <- match_times(amplitudes, dat)
 
   # FIXME: aperm(c(2,3,1)) assumes 3D raster — same geometry issue as get_correlation().
   suppressWarnings( # suppress warnings that sd is zero
-    fdr_rast <- filter(dat, time %in% times_cor) %>%
-      st_apply(get_spatial_dimensions(.), fdr_fun, amps = amps, .fname = 'PC') %>%
+    fdr_rast <- filter(dat, time %in% matched$times) %>%
+      st_apply(get_spatial_dimensions(.), fdr_fun, amps = matched$amps, .fname = 'PC') %>%
       aperm(c(2,3,1)) %>%
       st_apply('PC', adjust) %>%
       setNames('FDR')
@@ -73,10 +54,33 @@ get_fdr <- function(dat, patterns, fdr = 0.1, amplitudes = NULL) {
   fdr_rast %>%
     st_get_dimension_values('PC') %>%
     seq_along() %>%
-    map(~slice(fdr_rast, 'PC', .x) %>%
+    purrr::map(~slice(fdr_rast, 'PC', .x) %>%
           st_contour(contour_lines = TRUE, breaks = fdr) %>%
-          transmute(PC = paste0('PC', .x))) %>%
+          dplyr::transmute(PC = paste0('PC', .x))) %>%
     do.call(rbind, .)
+}
+
+#' Match time steps between amplitudes and a stars object
+#'
+#' @param amplitudes A tibble with a time column
+#' @param dat A stars object with a time dimension
+#' @return A list with `times` (common time steps) and `amps` (filtered amplitude matrix)
+#' @keywords internal
+match_times <- function(amplitudes, dat) {
+  times_amps <- amplitudes$time
+  times_dat <- st_get_dimension_values(dat, 'time')
+  # Use subsetting to preserve Date/POSIXct class (intersect can strip it)
+  times_cor <- times_amps[times_amps %in% times_dat]
+
+  if(length(times_cor) < 2) cli::cli_abort("Need at least two time steps in common.")
+  if(!(identical(times_cor, times_amps) & identical(times_cor, times_dat))) {
+    cli::cli_inform("Using the time period {times_cor[1]} to {times_cor[length(times_cor)]}.")
+  }
+
+  amps <- dplyr::filter(amplitudes, time %in% times_cor) %>%
+    dplyr::select(-time)
+
+  list(times = times_cor, amps = amps)
 }
 
 fdr_fun <- function(x, amps) {
@@ -86,4 +90,3 @@ fdr_fun <- function(x, amps) {
 adjust <- function(x) {
   p.adjust(x, method = 'fdr', n = sum(!is.na(x)))
 }
-
