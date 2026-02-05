@@ -7,7 +7,7 @@
 \method{screeplot}{patterns}(x, k = NULL, kmax = 10, ...)
 }
 \arguments{
-\item{x}{A patterns object from get_patterns()}
+\item{x}{A patterns object from patterns()}
 
 \item{k}{Optional number of components to highlight with vertical line}
 
@@ -23,8 +23,8 @@ Scree plot for EOF patterns
 }
 \examples{
 \dontrun{
-patterns <- get_patterns(data, k = 5)
-screeplot(patterns)
-screeplot(patterns, k = 3, kmax = 8)
+pat <- patterns(data, k = 5)
+screeplot(pat)
+screeplot(pat, k = 3, kmax = 8)
 }
 }

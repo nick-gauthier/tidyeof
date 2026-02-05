@@ -6,7 +6,8 @@
 \usage{
 \method{plot}{coupled_patterns}(
   x,
-  type = c("combined", "correlations", "canonical", "predictor", "response"),
+  type = c("combined", "correlations", "canonical", "canonical_patterns", "predictor",
+    "response"),
   side = c("predictor", "response", "both"),
   data = NULL,
   k = NULL,
@@ -18,11 +19,11 @@
 \item{x}{A `coupled_patterns` object.}
 
 \item{type}{Plot type: one of `"combined"`, `"correlations"`,
-`"canonical"`, `"predictor"`, or `"response"`.}
+`"canonical"`, `"canonical_patterns"`, `"predictor"`, or `"response"`.}
 
-\item{side}{When `type = "canonical"`, choose canonical variates from the
-predictor side, response side, or both (values: `"predictor"`,
-`"response"`, `"both"`). Ignored for other plot types.}
+\item{side}{When `type = "canonical"` or `type = "canonical_patterns"`,
+choose from the predictor side, response side, or both (values:
+`"predictor"`, `"response"`, `"both"`). Ignored for other plot types.}
 
 \item{data}{Optional amplitudes or patterns for the canonical variate plots.
 For `side = "both"`, a list with elements `predictor` and `response` may be
@@ -37,13 +38,14 @@ supplied. Defaults to the training patterns stored in `x` when omitted.}
 `type = "predictor"` or `type = "response"` calls.}
 }
 \value{
-A ggplot object (or a patchwork object when `type = "combined"`).
+A ggplot object (or a patchwork object when `type = "combined"` or
+  `type = "canonical_patterns"` with `side = "both"`).
 }
 \description{
 Provides visualization helpers for `coupled_patterns` objects. The default
 `type = "combined"` mirrors the patterns plotting workflow by displaying the
 predictor and response spatial patterns alongside their canonical variate time
 series. Additional types include canonical correlation bars, standalone
-canonical variate panels, or direct access to the underlying predictor / response
-pattern plots.
+canonical variate panels, canonical spatial patterns, or direct access to the
+underlying predictor / response pattern plots.
 }

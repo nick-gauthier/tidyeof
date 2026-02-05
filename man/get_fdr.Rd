@@ -9,7 +9,7 @@ get_fdr(dat, patterns, fdr = 0.1, amplitudes = NULL)
 \arguments{
 \item{dat}{A stars object with a time dimension}
 
-\item{patterns}{A patterns object from get_patterns()}
+\item{patterns}{A patterns object from patterns()}
 
 \item{fdr}{False discovery rate threshold (default 0.1)}
 

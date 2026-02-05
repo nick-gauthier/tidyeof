@@ -16,6 +16,6 @@ validate_patterns(x, arg = rlang::caller_arg(x), call = rlang::caller_env())
 \description{
 Ensures required components are present and aligned so downstream functions
 can rely on a predictable structure. This is chiefly intended for
-guarding public entry points like project_patterns() and reconstruct_field().
+guarding public entry points like project_patterns() and reconstruct().
 }
 \keyword{internal}

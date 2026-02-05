@@ -9,7 +9,7 @@ get_correlation(dat, patterns, amplitudes = NULL)
 \arguments{
 \item{dat}{A stars object with a time dimension}
 
-\item{patterns}{A patterns object from get_patterns()}
+\item{patterns}{A patterns object from patterns()}
 
 \item{amplitudes}{Optional amplitudes tibble (defaults to patterns$amplitudes)}
 }

@@ -7,7 +7,7 @@
 flip_patterns(patterns)
 }
 \arguments{
-\item{patterns}{A patterns object from get_patterns()}
+\item{patterns}{A patterns object from patterns()}
 }
 \value{
 The patterns object with signs adjusted for consistency

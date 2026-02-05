@@ -18,3 +18,8 @@ List of k vectors, each containing the time values for that fold
 Divides time steps into k contiguous folds for temporal cross-validation.
 Folds are kept contiguous to preserve temporal structure.
 }
+\seealso{
+[prep_cv_folds()] for preparing complete CV folds with pre-computed patterns
+
+[tune_cca()] for hyperparameter grid search
+}

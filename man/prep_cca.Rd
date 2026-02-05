@@ -2,7 +2,7 @@
 % Please edit documentation in R/prep_cv.R
 \name{prep_cca}
 \alias{prep_cca}
-\title{Prepare CCA cross-validation data}
+\title{Prepare CCA cross-validation data (deprecated)}
 \usage{
 prep_cca(
   preds,
@@ -27,18 +27,22 @@ prep_cca(
 
 \item{kfolds}{Number of cross-validation folds (default 5)}
 
-\item{scale}{Passed to get_patterns()}
+\item{scale}{Passed to patterns()}
 
-\item{rotate}{Passed to get_patterns()}
+\item{rotate}{Passed to patterns()}
 
-\item{monthly}{Passed to get_patterns()}
+\item{monthly}{Passed to patterns()}
 
-\item{weight}{Passed to get_patterns()}
+\item{weight}{Passed to patterns()}
 }
 \value{
 Tibble with train_obs, train_preds, and test columns for each fold
 }
 \description{
+`r lifecycle::badge("deprecated")`
+
+Use [prep_cv_folds()] instead for modern cross-validation workflows.
+
 Sets up k-fold cross-validation for CCA-based pattern coupling. Extracts
 patterns from training folds and prepares test data for each fold.
 }
