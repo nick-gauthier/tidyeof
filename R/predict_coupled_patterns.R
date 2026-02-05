@@ -115,13 +115,10 @@ apply_cca_prediction <- function(new_amplitudes, cca_result, k) {
   canonical_responses <- canonical_predictors %*% diag(cca_result$cor[1:k], nrow = k)
 
   # Transform canonical responses back to PC space
-  # Use the full inverse (or pseudoinverse) then keep the first k canonical modes
-  if (nrow(cca_result$ycoef) == ncol(cca_result$ycoef)) {
-    ycoef_inv <- solve(cca_result$ycoef)
-  } else {
-    ycoef_inv <- MASS::ginv(cca_result$ycoef)
-  }
-  response_amplitudes <- canonical_responses %*% ycoef_inv[1:k, , drop = FALSE]
+  # Use pseudo-inverse of TRUNCATED ycoef, not subset of full inverse
+  # (full inverse has cross-contributions from unused modes)
+  ycoef_k <- cca_result$ycoef[, 1:k, drop = FALSE]
+  response_amplitudes <- canonical_responses %*% MASS::ginv(ycoef_k)
 
   # Add back response centering if used during training
   if (!identical(cca_result$ycenter, FALSE)) {
@@ -137,7 +134,7 @@ apply_cca_prediction <- function(new_amplitudes, cca_result, k) {
   pc_names <- paste0("PC", 1:n_response_pcs)
 
   result <- response_amplitudes %>%
-    as_tibble() %>%
+    as_tibble(.name_repair = "minimal") %>%
     setNames(pc_names) %>%
     mutate(time = new_times, .before = 1)
 
@@ -205,11 +202,114 @@ get_canonical_variables <- function(object, data, type = c("predictor", "respons
   # Return as tibble
   canonical_names <- paste0("CV", 1:k)
   result <- canonical_vars %>%
-    as_tibble() %>%
+    as_tibble(.name_repair = "minimal") %>%
     setNames(canonical_names) %>%
     mutate(time = times, .before = 1)
 
   return(result)
+}
+
+#' Get Canonical Spatial Patterns from Coupled Patterns
+#'
+#' Computes the spatial patterns corresponding to each canonical mode by
+#' taking linear combinations of the original EOFs weighted by CCA coefficients.
+#' These are the spatial patterns that, when projected onto the data, yield
+#' the canonical variates.
+#'
+#' @param object A coupled_patterns object
+#' @param type Either "predictor" or "response"
+#' @param k Number of canonical modes to extract (default: all available)
+#'
+#' @return A stars object with canonical spatial patterns (dimension "CV" instead of "PC")
+#'
+#' @export
+#'
+#' @examples
+#' \dontrun{
+#' coupled <- couple_patterns(pred_patterns, resp_patterns, k = 3)
+#'
+#' # Get canonical patterns for response side
+#' resp_canonical <- get_canonical_patterns(coupled, type = "response")
+#' plot(resp_canonical)
+#'
+#' # Compare to original EOFs
+#' plot(coupled$response_patterns$eofs)
+#' }
+get_canonical_patterns <- function(object, type = c("predictor", "response"), k = NULL) {
+
+  type <- match.arg(type)
+
+  if (is.null(k)) {
+    k <- object$k
+  }
+
+  # Get the patterns object and CCA coefficients
+
+  if (type == "predictor") {
+    patterns <- object$predictor_patterns
+    coef_matrix <- object$cca$xcoef[, 1:k, drop = FALSE]
+  } else {
+    patterns <- object$response_patterns
+    coef_matrix <- object$cca$ycoef[, 1:k, drop = FALSE]
+  }
+
+  # Extract EOF array (spatial dims + PC)
+  eof_stars <- patterns$eofs
+  eof_dims <- stars::st_dimensions(eof_stars)
+
+  # Find spatial dimensions (everything except PC)
+  spatial_dim_names <- setdiff(names(eof_dims), "PC")
+  n_pcs <- length(stars::st_get_dimension_values(eof_stars, "PC"))
+
+  # Get the underlying array
+  eof_array <- eof_stars[[1]]
+
+  # Determine array dimension order
+  dim_names <- names(dim(eof_array))
+  if (is.null(dim_names)) {
+    # Assume standard order from stars: spatial dims first, PC last
+    dim_names <- c(spatial_dim_names, "PC")
+  }
+  pc_dim <- which(dim_names == "PC")
+
+  # Reshape to matrix: (spatial pixels) x (PCs)
+  # Move PC dimension to last if not already
+  if (pc_dim != length(dim(eof_array))) {
+    perm_order <- c(setdiff(seq_along(dim(eof_array)), pc_dim), pc_dim)
+    eof_array <- aperm(eof_array, perm_order)
+  }
+
+  spatial_shape <- dim(eof_array)[-length(dim(eof_array))]
+  n_spatial <- prod(spatial_shape)
+  eof_matrix <- matrix(eof_array, nrow = n_spatial, ncol = n_pcs)
+
+  # Compute canonical patterns: (spatial) x (canonical modes)
+  # canonical_pattern[i] = Σ_j EOF[j] × coef[j,i]
+  canonical_matrix <- eof_matrix %*% coef_matrix
+
+  # Reshape back to spatial array with CV dimension
+  canonical_array <- array(canonical_matrix, dim = c(spatial_shape, k))
+
+  # Build new stars object with CV dimension instead of PC
+  new_dims <- eof_dims[spatial_dim_names]
+
+  cv_dim <- list(
+    from = 1L,
+    to = k,
+    offset = NA_real_,
+    delta = NA_real_,
+    refsys = NA_character_,
+    point = FALSE,
+    values = paste0("CV", 1:k)
+  )
+  class(cv_dim) <- "dimension"
+  new_dims$CV <- cv_dim
+  class(new_dims) <- "dimensions"
+
+  result <- stars::st_as_stars(canonical_array, dimensions = new_dims)
+  names(result) <- names(eof_stars)
+
+  result
 }
 
 #' Get Canonical Correlations from Coupled Patterns
