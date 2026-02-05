@@ -7,6 +7,9 @@
 #' @param kfolds Number of folds (default 5)
 #'
 #' @return List of k vectors, each containing the time values for that fold
+#'
+#' @seealso [prep_cv_folds()] for preparing complete CV folds with pre-computed patterns
+#' @seealso [tune_cca()] for hyperparameter grid search
 #' @export
 prep_folds <- function(times, kfolds = 5){
   # divide years into kfolds contiguous folds
