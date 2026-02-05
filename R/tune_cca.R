@@ -44,7 +44,7 @@ prep_cv_folds <- function(predictor, response,
   if (isTRUE(rotate)) {
     cli::cli_abort(
       "rotate = TRUE is not supported in cross-validation. Rotation depends on k, so truncating max-k patterns invalidates the rotated basis.",
-      class = "tidyEOF_invalid_option"
+      class = "tidyeof_invalid_option"
     )
   }
 
@@ -55,12 +55,12 @@ prep_cv_folds <- function(predictor, response,
 
   if (length(common_times) == 0) {
     cli::cli_abort("No common time steps found between predictor and response.",
-                   class = "tidyEOF_no_common_times")
+                   class = "tidyeof_no_common_times")
   }
 
   if (length(common_times) < kfolds * 2) {
     cli::cli_abort("Not enough common time steps ({length(common_times)}) for {kfolds}-fold CV.",
-                   class = "tidyEOF_insufficient_data")
+                   class = "tidyeof_insufficient_data")
   }
 
   # Filter to common times
@@ -165,23 +165,23 @@ tune_cca <- function(cv_folds,
 
   if (!inherits(cv_folds, "cv_folds")) {
     cli::cli_abort("cv_folds must be a cv_folds object from prep_cv_folds()",
-                   class = "tidyEOF_invalid_input")
+                   class = "tidyeof_invalid_input")
   }
   if (isTRUE(cv_folds$pattern_opts$rotate)) {
     cli::cli_abort(
       "cv_folds were created with rotate = TRUE, which is not supported for cross-validation truncation.",
-      class = "tidyEOF_invalid_option"
+      class = "tidyeof_invalid_option"
     )
   }
 
   # Validate k values against max_k
   if (max(k_pred) > cv_folds$max_k_pred) {
     cli::cli_abort("max(k_pred) = {max(k_pred)} exceeds max_k_pred = {cv_folds$max_k_pred} from prep_cv_folds()",
-                   class = "tidyEOF_invalid_k")
+                   class = "tidyeof_invalid_k")
   }
   if (max(k_resp) > cv_folds$max_k_resp) {
     cli::cli_abort("max(k_resp) = {max(k_resp)} exceeds max_k_resp = {cv_folds$max_k_resp} from prep_cv_folds()",
-                   class = "tidyEOF_invalid_k")
+                   class = "tidyeof_invalid_k")
   }
 
   # Build parameter grid
@@ -305,7 +305,7 @@ summarize_cv <- function(cv_results, metric = "rmse", minimize = TRUE) {
   if (!metric %in% names(cv_results)) {
     available <- setdiff(names(cv_results), c("k_pred", "k_resp", "k_cca", "fold"))
     cli::cli_abort("Metric '{metric}' not found. Available: {available}",
-                   class = "tidyEOF_invalid_metric")
+                   class = "tidyeof_invalid_metric")
   }
 
   # Find all metric columns
@@ -406,7 +406,7 @@ tune_eof <- function(data,
 
   if (length(times) < kfolds * 2) {
     cli::cli_abort("Not enough time steps ({length(times)}) for {kfolds}-fold CV.",
-                   class = "tidyEOF_insufficient_data")
+                   class = "tidyeof_insufficient_data")
   }
 
   # Create fold assignments
@@ -499,7 +499,7 @@ summarize_eof_cv <- function(cv_results, metric = "rmse", minimize = TRUE) {
   if (!metric %in% names(cv_results)) {
     available <- setdiff(names(cv_results), c("k", "fold"))
     cli::cli_abort("Metric '{metric}' not found. Available: {available}",
-                   class = "tidyEOF_invalid_metric")
+                   class = "tidyeof_invalid_metric")
   }
 
   # Find all metric columns

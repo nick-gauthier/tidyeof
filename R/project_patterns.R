@@ -76,7 +76,7 @@ project_patterns <- function(patterns, newdata) {
  if (is.null(patterns$proj_matrix)) {
     cli::cli_abort(c(
       "Patterns object is missing {.field proj_matrix}.",
-      "i" = "This patterns object may have been created with an older version of tidyEOF.",
+      "i" = "This patterns object may have been created with an older version of tidyeof.",
       "i" = "Please regenerate it using {.fn patterns}."
     ))
   }

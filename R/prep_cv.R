@@ -23,7 +23,12 @@ prep_folds <- function(times, kfolds = 5){
     purrr::map(pull)
 }
 
-#' Prepare CCA cross-validation data
+#' Prepare CCA cross-validation data (deprecated)
+#'
+#' @description
+#' `r lifecycle::badge("deprecated")`
+#'
+#' Use [prep_cv_folds()] instead for modern cross-validation workflows.
 #'
 #' Sets up k-fold cross-validation for CCA-based pattern coupling. Extracts
 #' patterns from training folds and prepares test data for each fold.
@@ -41,6 +46,7 @@ prep_folds <- function(times, kfolds = 5){
 #' @return Tibble with train_obs, train_preds, and test columns for each fold
 #' @export
 prep_cca <- function(preds, obs, k_preds, k_obs, kfolds = 5, scale = FALSE, rotate = FALSE, monthly = FALSE, weight = TRUE) {
+  .Deprecated("prep_cv_folds")
   # find the years of overlap between the response and predictor fields
   pred_times <- st_get_dimension_values(preds, 'time')
   obs_times <- st_get_dimension_values(obs, 'time')
@@ -62,50 +68,6 @@ prep_cca <- function(preds, obs, k_preds, k_obs, kfolds = 5, scale = FALSE, rota
 
   tibble(train_obs, train_preds, test)
 }
-
-
-# =============================================================================
-# LEGACY: prep_eot - EOT-based cross-validation using remote package
-# Moved to R_archive/ for reference. Uses anomalize(), denoise(), eot() from
-# remote package and as('Raster') conversion. Not compatible with current
-# stars-based architecture.
-# =============================================================================
-# #' @export
-# prep_eot <- function(preds, obs, k_preds, k_obs, k_cca){
-#   # find the years of overlap between the response and predictor fields
-#   time_steps <- intersect(st_get_dimension_values(preds, 'time'),
-#                           st_get_dimension_values(obs, 'time'))
-#   preds <- filter(preds, time %in% time_steps)
-#   obs <- filter(obs, time %in% time_steps)
-#   folds <- prep_folds(time_steps) # this does 5 fold by default, but could change
-#
-#   # preprocess the training data for each fold
-#   obs_train_rast <- purrr::map(folds, ~ filter(obs, !(time %in% .)) %>%
-#                                  as('Raster'))
-#
-#   pred_train_rast <-  purrr::map(folds, ~ filter(preds, !(time %in% .)) %>%
-#                                    as('Raster'))
-#
-#   obs_train <- purrr::map(obs_train_rast, ~ anomalize(.) %>%
-#                             denoise(k = k_obs, weighted = TRUE, verbose = FALSE))
-#
-#   pred_train <-  purrr::map(pred_train_rast, ~ anomalize(.) %>%
-#                               denoise(k = k_preds, weighted = TRUE, verbose = FALSE))
-#
-#   # preprocess test data for each fold
-#   test <- purrr::map(folds, ~ filter(preds, time %in% .) %>%
-#                        as('Raster')) %>% # test years
-#     map2(pred_train_rast, ~.x - mean(.y)) # subtract the training predictor mean from the test predictors
-#
-#   means <- purrr::map(obs_train_rast, raster::mean)
-#
-#   # fit model to training data
-#   eots <- map2(pred_train, obs_train, ~eot(.x, .y, n = k_cca, standardised = FALSE, verbose = FALSE))
-#
-#   list(eot = eots, # this hard codes 10 patterns, but could be changed to min(k_preds, k_obs)
-#        test = test,
-#        mean = means)
-# }
 
 #' Prepare delta method cross-validation data
 #'

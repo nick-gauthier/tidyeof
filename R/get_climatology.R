@@ -34,7 +34,7 @@
 get_climatology <- function(dat, monthly = FALSE) {
   # Basic validation
   if (!inherits(dat, "stars")) {
-    rlang::abort("Input must be a stars object", class = "tidyEOF_invalid_input")
+    rlang::abort("Input must be a stars object", class = "tidyeof_invalid_input")
   }
 
   if (monthly) {
@@ -90,14 +90,14 @@ get_climatology <- function(dat, monthly = FALSE) {
 get_anomalies <- function(dat, clim = NULL, scale = FALSE, monthly = FALSE) {
   # Basic validation
   if (!inherits(dat, "stars")) {
-    rlang::abort("Input must be a stars object", class = "tidyEOF_invalid_input")
+    rlang::abort("Input must be a stars object", class = "tidyeof_invalid_input")
   }
 
   # Get or validate climatology
   if (is.null(clim)) {
     clim <- get_climatology(dat, monthly = monthly)
   } else if (!inherits(clim, "stars")) {
-    rlang::abort("climatology must be a stars object", class = "tidyEOF_invalid_input")
+    rlang::abort("climatology must be a stars object", class = "tidyeof_invalid_input")
   }
 
   # Extract statistics
@@ -112,7 +112,7 @@ get_anomalies <- function(dat, clim = NULL, scale = FALSE, monthly = FALSE) {
     n_times <- length(times)
 
     if (n_times %% 12 != 0) {
-      rlang::abort("Data does not contain complete years. Need 12-month intervals for monthly climatology.", class = "tidyEOF_invalid_time")
+      rlang::abort("Data does not contain complete years. Need 12-month intervals for monthly climatology.", class = "tidyeof_invalid_time")
     }
 
     # Get the actual months in the data
@@ -152,10 +152,10 @@ get_anomalies <- function(dat, clim = NULL, scale = FALSE, monthly = FALSE) {
 restore_climatology <- function(anomalies, clim, scale = FALSE, monthly = FALSE) {
   # Basic validation
   if (!inherits(anomalies, "stars")) {
-    rlang::abort("Anomalies must be a stars object", class = "tidyEOF_invalid_input")
+    rlang::abort("Anomalies must be a stars object", class = "tidyeof_invalid_input")
   }
   if (!inherits(clim, "stars")) {
-    rlang::abort("Climatology must be a stars object", class = "tidyEOF_invalid_input")
+    rlang::abort("Climatology must be a stars object", class = "tidyeof_invalid_input")
   }
 
   # Extract statistics and handle units properly

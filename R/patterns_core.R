@@ -9,7 +9,7 @@ check_stars_object <- function(x, arg = rlang::caller_arg(x), call = rlang::call
   if (!inherits(x, "stars")) {
     cli::cli_abort(
       "Argument {.arg {arg}} must be a {.cls stars} object, not {.cls {class(x)}}.",
-      class = "tidyEOF_invalid_input",
+      class = "tidyeof_invalid_input",
       call = call
     )
   }
@@ -25,7 +25,7 @@ check_k_valid <- function(k, max_k, arg = rlang::caller_arg(k), call = rlang::ca
   if (!is.numeric(k) || length(k) != 1 || k < 1 || k > max_k || k != floor(k)) {
     cli::cli_abort(
       "Argument {.arg {arg}} must be a single integer between 1 and {max_k}.",
-      class = "tidyEOF_invalid_k",
+      class = "tidyeof_invalid_k",
       call = call
     )
   }
@@ -73,30 +73,29 @@ patterns <- function(dat, k = 4, scale = TRUE, rotate = FALSE, monthly = FALSE, 
     weights = weights
   )
 
-  # Create output pattern object with all components
-  patterns <- list(
+  # Create output pattern object using formal constructor
+  patterns <- new_patterns(
     eofs = eofs$spatial_patterns,
     amplitudes = eofs$amplitudes,
-    climatology = climatology,
     eigenvalues = eofs$eigenvalues,
+    k = k,
+    proj_matrix = eofs$proj_matrix,
+    center = eofs$center,
+    scale = eofs$scale,
     rotation = eofs$rotation_matrix,
+    climatology = climatology,
     units = original_units,
     names = names(dat),
     scaled = scale,
     monthly = monthly,
     rotate = rotate,
-    k = k,
     weight = weight,
-    valid_pixels = eofs$valid_pixels,
-    proj_matrix = eofs$proj_matrix,
-    center = eofs$center,
-    scale = eofs$scale
+    valid_pixels = eofs$valid_pixels
   )
 
   # Align patterns so EOFs have roughly similar dominant signs
   patterns <- flip_patterns(patterns)
 
-  class(patterns) <- "patterns"
   return(patterns)
 }
 
@@ -157,7 +156,7 @@ get_eofs <- function(dat, k, rotate = FALSE, irlba_threshold, weights = NULL) {
     if (length(weights) != n_pixels) {
       cli::cli_abort(
         "Length of {.arg weights} ({length(weights)}) must match number of spatial points ({n_pixels}).",
-        class = "tidyEOF_weight_mismatch"
+        class = "tidyeof_weight_mismatch"
       )
     }
     weights_valid <- weights[valid_pixels]
@@ -306,7 +305,7 @@ get_spatial_dimensions <- function(dat) {
   if (is.na(x_dim) || is.na(y_dim)) {
     cli::cli_abort(
       "Could not find spatial dimensions. Expected 'x'/'lon'/'longitude'/'easting' and 'y'/'lat'/'latitude'/'northing', or 'geometry'.",
-      class = "tidyEOF_invalid_dimensions"
+      class = "tidyeof_invalid_dimensions"
     )
   }
 
