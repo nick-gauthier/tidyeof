@@ -1,0 +1,70 @@
+# Tune CCA hyperparameters via cross-validation
+
+Performs grid search over k_pred, k_resp, and optionally k_cca using
+precomputed patterns from \`prep_cv_folds()\`. Pattern truncation is
+cheap, so this runs quickly even with large grids.
+
+## Usage
+
+``` r
+tune_cca(
+  cv_folds,
+  k_pred = 1:10,
+  k_resp = 1:10,
+  k_cca = NULL,
+  metrics = c("rmse", "cor_spatial", "cor_temporal"),
+  parallel = FALSE
+)
+```
+
+## Arguments
+
+- cv_folds:
+
+  A cv_folds object from \`prep_cv_folds()\`
+
+- k_pred:
+
+  Vector of predictor EOF counts to try (default 1:10)
+
+- k_resp:
+
+  Vector of response EOF counts to try (default 1:10)
+
+- k_cca:
+
+  Vector of CCA mode counts to try, or NULL (default) to use
+  \`min(k_pred, k_resp)\` for each combination. Using fewer CCA modes
+  than the maximum can act as regularization.
+
+- metrics:
+
+  Character vector of metrics to compute. Options: "rmse",
+  "cor_spatial", "cor_temporal" (default: all three)
+
+- parallel:
+
+  Logical, whether to use furrr for parallel execution (default FALSE)
+
+## Value
+
+A tibble with columns: k_pred, k_resp, k_cca, fold, and one column per
+metric requested.
+
+## Examples
+
+``` r
+if (FALSE) { # \dontrun{
+cv <- prep_cv_folds(coarse_data, fine_data, kfolds = 5,
+                    max_k_pred = 10, max_k_resp = 10)
+
+# Grid search over k_pred and k_resp (k_cca = min automatically)
+results <- tune_cca(cv, k_pred = 1:10, k_resp = 1:10)
+
+# Also tune k_cca for regularization
+results <- tune_cca(cv, k_pred = 1:10, k_resp = 1:10, k_cca = 1:5)
+
+# Summarize and find best params
+summary <- summarize_cv(results, metric = "rmse")
+} # }
+```
