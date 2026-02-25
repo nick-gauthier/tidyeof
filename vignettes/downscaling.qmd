@@ -40,16 +40,19 @@ fine <- system.file("testdata/prism_test.RDS", package = "tidyeof") |>
 # In practice, this would be a GCM or reanalysis product
 coarse <- fine |>
   st_warp(cellsize = 0.2, method = "average", use_gdal = TRUE, no_data_value = -99999) |>
-  setNames(names(fine))
+  setNames(names(fine)) |>
+  st_set_dimensions("band",
+    values = st_get_dimension_values(fine, "time"),
+    names = "time")
 ```
 
 ```{r}
 #| label: show-grids
 #| fig-width: 8
 #| fig-height: 3
-p1 <- ggplot() + geom_stars(data = slice(fine, "time", 1)) +
+p1 <- ggplot() + geom_stars(data = fine[,,,1]) +
   scale_fill_viridis_c(na.value = NA) + coord_sf() + theme_void() + ggtitle("Fine (PRISM)")
-p2 <- ggplot() + geom_stars(data = slice(coarse, "time", 1)) +
+p2 <- ggplot() + geom_stars(data = coarse[,,,1]) +
   scale_fill_viridis_c(na.value = NA) + coord_sf() + theme_void() + ggtitle("Coarse (aggregated)")
 patchwork::wrap_plots(p1, p2)
 ```
@@ -147,10 +150,10 @@ predicted <- predict(coupled, coarse)
 #| fig-height: 6
 # Compare a single time step
 t_idx <- 12
-p1 <- ggplot() + geom_stars(data = slice(fine, "time", t_idx)) +
+p1 <- ggplot() + geom_stars(data = fine[,,,t_idx]) +
   scale_fill_viridis_c(na.value = NA) + coord_sf() + theme_void() +
   ggtitle("Observed (fine)")
-p2 <- ggplot() + geom_stars(data = slice(predicted, "time", t_idx)) +
+p2 <- ggplot() + geom_stars(data = predicted[,,,t_idx]) +
   scale_fill_viridis_c(na.value = NA) + coord_sf() + theme_void() +
   ggtitle("Predicted (downscaled)")
 patchwork::wrap_plots(p1, p2)

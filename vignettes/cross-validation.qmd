@@ -34,7 +34,10 @@ fine <- system.file("testdata/prism_test.RDS", package = "tidyeof") |>
 
 coarse <- fine |>
   st_warp(cellsize = 0.2, method = "average", use_gdal = TRUE, no_data_value = -99999) |>
-  setNames(names(fine))
+  setNames(names(fine)) |>
+  st_set_dimensions("band",
+    values = st_get_dimension_values(fine, "time"),
+    names = "time")
 ```
 
 ## Tuning EOF truncation
