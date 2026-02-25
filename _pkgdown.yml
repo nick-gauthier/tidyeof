@@ -48,6 +48,20 @@ reference:
       - get_correlation
       - get_fdr
 
+  - title: "S3 Methods"
+    desc: "Print, plot, predict, and subset methods for tidyeof objects"
+    contents:
+      - plot.patterns
+      - plot.coupled_patterns
+      - plot.common_patterns
+      - predict.coupled_patterns
+      - print.patterns
+      - print.coupled_patterns
+      - print.cv_folds
+      - screeplot.patterns
+      - summary.coupled_patterns
+      - "`[.patterns`"
+
 articles:
   - title: "Getting Started"
     navbar: ~
