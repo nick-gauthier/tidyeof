@@ -1,0 +1,1491 @@
+---
+title: "R code for: 'Pattern-based downscaling of snowpack variability in the western United States'"
+author: "Nicolas Gauthier"
+date: "Last knit on: `r Sys.Date()`"
+output:
+  tufte::tufte_html: default
+  tufte::tufte_handout:
+    citation_package: natbib
+    latex_engine: xelatex
+  tufte::tufte_book:
+    citation_package: natbib
+    latex_engine: xelatex
+link-citations: yes
+---
+
+Downscaling snow water equivalent in the western US.
+
+# Introduction
+
+
+Import the packages required for this analysis.
+
+```{r setup}
+knitr::opts_chunk$set(fig.width = 6, fig.asp = 0.618)
+
+# analysis
+library(remote) # empirical orthogonal teleconnections
+library(tidyverse) # data manipulation and visualization
+library(mgcv) # flexible nonlinear regression models
+library(modelr) # tidy modeling
+library(MuMIn) # mutli-model inference
+library(stars) # tidy spatio-temporal arrays
+library(R.matlab) # import SNOTEL data in Matlab format
+
+# plotting
+library(sf) # shapefiles and plotting
+library(scico) # color palettes
+library(patchwork) # multi-panel plots
+library(ggridges) # ridge plots
+library(smoothr) # smooth contours on maps
+
+# this package
+devtools::load_all()
+
+load('../R/sysdata.rda')
+```
+ 
+# Snowpack in the western US
+ 
+First plot March SWE climatology from observations and reanalysis data. We immediately see the mismatch between the two because of the coarse resolution reanalysis. To drive home the point, here's the high-resolution observations, resampled to the reanalysis resolution. For a better comparison, each dataset was reduced to the common range of 1982--2010. The coarse data fail to capture the topographic heterogeneity of the domain, and thus the small-scale variations in elevation and temperature that influence snow accumulation and melt.
+
+```{r, fig.width = 7, fig.asp = .7, echo = FALSE, fig.cap="A) Mean March SWE from PRISM/SNOTEL observations, 1982-2017. B) Mean March SWE from CERA-20C Reanalysis, 1901-2010."}
+a <- ggplot() +
+  geom_stars(data = get_climatology(prism)[,,,1]) +
+  geom_sf(data = states_wus, fill = NA, color = 'black') +
+   scale_fill_distiller(palette = 'Blues', direction = 1, na.value = NA, name = 'SWE\n(mm)') +
+  labs(x = 'Longitude', y = 'Latitude') +
+  theme_bw()
+
+b <- ggplot() +
+  geom_stars(data = get_climatology(filter(cera, time > 1980))[,,,1]) +
+  geom_sf(data = states_wus, fill = NA, color = 'black') +
+   scale_fill_distiller(palette = 'Blues', direction = 1, na.value = NA, name = 'SWE\n(mm)', limits = c(0, 343)) +
+  theme_void()
+
+c <- ggplot() +
+  geom_stars(data = get_climatology(filter(cesm, time > 1980))[,,,1]) +
+  geom_sf(data = states_wus, fill = NA, color = 'black') +
+   scale_fill_distiller(palette = 'Blues', direction = 1, na.value = NA, name = 'SWE\n(mm)', limits = c(0, 343)) +
+  theme_void() 
+
+d <- ggplot() +
+  geom_stars(data = get_climatology(filter(ccsm, time > 1980))[,,,1]) +
+  geom_sf(data = states_wus, fill = NA, color = 'black') +
+   scale_fill_distiller(palette = 'Blues', direction = 1, na.value = NA, name = 'SWE\n(mm)', limits = c(0, 343)) +
+  theme_void() 
+
+
+(a + (b / d / c + plot_layout(guides = 'collect') )) + plot_layout( widths = c(1.5,1)) +  plot_annotation(tag_levels = 'a', tag_prefix = '(', tag_suffix = ')')& theme(legend.position = 'bottom')
+```
+
+```{r}
+e <- ggplot() +
+  geom_stars(data = get_climatology(filter(noaa, between(time, 1980, 2010)))[,,,1]) +
+  geom_sf(data = states_wus, fill = NA, color = 'black') +
+  scale_fill_distiller(palette = 'Blues', direction = 1, na.value = NA, name = 'SWE\n(mm)', limits = c(0, 343)) +  theme_void()  + ggtitle('NOAA-20C', 'Mean March SWE, 1980-2010')
+
+b + e + plot_layout(guides = 'collect')
+ggsave('noaa_cera_comparison_space.png', height = 4, width = 6)
+```
+
+```{r, fig.width = 7, fig.asp = .7, echo = FALSE, fig.cap="A) Mean March SWE from PRISM/SNOTEL observations, 1982-2017. B) Mean March SWE from CERA-20C Reanalysis, 1901-2010."}
+a <- ggplot() +
+  geom_stars(data = get_climatology(filter(prism, between(time, 1982, 2010)))[,,,1]) +
+  geom_sf(data = states_wus, fill = NA, color = 'black') +
+   scale_fill_distiller(palette = 'Blues', direction = 1, na.value = NA, name = 'SWE\n(mm)') +
+  labs(x = 'Longitude', y = 'Latitude') +
+theme_void()
+
+b <- ggplot() +
+  geom_stars(data = get_climatology(filter(cera, between(time, 1982, 2010)))[,,,1]) +
+  geom_sf(data = states_wus, fill = NA, color = 'black') +
+   scale_fill_distiller(palette = 'Blues', direction = 1, na.value = NA, name = 'SWE\n(mm)', limits = c(0, 333)) +
+  theme_void()
+
+c <- ggplot() +
+  geom_stars(data = get_climatology(filter(ccsm, between(time, 1982, 2010)))[,,,1]) +
+  geom_sf(data = states_wus, fill = NA, color = 'black') +
+   scale_fill_distiller(palette = 'Blues', direction = 1, na.value = NA, name = 'SWE\n(mm)', limits = c(0, 333)) +
+  theme_void() 
+
+(a + (b / c + plot_layout(guides = 'collect') )) + plot_layout( widths = c(1.5,1)) +  plot_annotation(tag_levels = 'a', tag_prefix = '(', tag_suffix = ')')& theme(legend.position = 'bottom')
+```
+
+```{r, fig.width = 7, fig.asp = .7, echo = FALSE, fig.cap="A) Mean March SWE from PRISM/SNOTEL observations, 1982-2017. B) Mean March SWE from CERA-20C Reanalysis, 1901-2010."}
+a <- ggplot() +
+  geom_stars(data = get_climatology(filter(prism, between(time, 1982, 2010)))[,,,1]) +
+  geom_sf(data = states_wus, fill = NA, color = 'black') +
+   scale_fill_scico(palette = 'davos', direction = -1, na.value = NA, name = 'SWE\n(mm)') +
+  labs(x = 'Longitude', y = 'Latitude') +
+theme_void()
+
+b <- ggplot() +
+  geom_stars(data = get_climatology(filter(cera, between(time, 1982, 2010)))[,,,1]) +
+  geom_sf(data = states_wus, fill = NA, color = 'black') +
+   scale_fill_scico(palette = 'davos', direction = -1, na.value = NA, name = 'SWE\n(mm)', limits = c(0, 333)) +
+  theme_void()
+
+c <- ggplot() +
+  geom_stars(data = get_climatology(filter(ccsm, between(time, 1982, 2010)))[,,,1]) +
+  geom_sf(data = states_wus, fill = NA, color = 'black') +
+   scale_fill_scico(palette = 'davos', direction = -1, na.value = NA, name = 'SWE\n(mm)', limits = c(0, 333)) +
+  theme_void() 
+
+(a + (b / c + plot_layout(guides = 'collect') )) + plot_layout( widths = c(1.5,1)) +  plot_annotation(tag_levels = 'a', tag_prefix = '(', tag_suffix = ')')& theme(legend.position = 'bottom')
+```
+
+```{r}
+ggsave('swe_comparison.png', width = 7, height = .7 * 7, dpi = 600)
+```
+
+Next we'll look at how SWE has varied over time and space.
+
+
+# Modes of Snowpack Variability
+
+In spite of the mismatch in mean values, perhaps the *variability* in SWE from year to year has something in common.
+
+## PCA
+
+We can decompose all this year-to-year variability into the dominant spatial modes -- robust spatial anomaly patterns that tend to co-occur.
+
+Run a principal components analysis. Get the eigenvalues, and run some truncation tests. Note these are each captured on the full time span of each dataset. So 32 years for prism, 
+
+```{r, echo = FALSE}
+e <- plot_scree(prism, k = 4, kmax = 10)
+f <- plot_scree(cera, k = 4, kmax = 10)
+g <- plot_scree(cesm, k = 4, kmax = 10)
+h <- plot_scree(ccsm, k = 4, kmax = 10)
+
+e + f + g + h + plot_annotation(tag_levels = 'A')
+```
+
+```{r echo = FALSE}
+ggsave('eigenvalues.png', width = 8, height = 3.2)
+```
+
+```{r}
+plot_scree(noaa, k = 4, kmax = 10)
+```
+
+## EOFs
+
+So let's stick with the 4 and 4 solution, and investigate those patterns more. 
+Lets start by truncating at 4. Extract the pc amplitude time series and EOF spatial patterns for the leading 4 modes.
+
+```{r}
+n_modes <- 4
+```
+
+```{r}
+prism_patterns <- get_patterns(prism, k = n_modes)
+cera_patterns <- get_patterns(cera, k = n_modes)
+cesm_patterns <- get_patterns(filter(cesm, between(time, 1901, 2010)), k = n_modes)
+ccsm_patterns <- get_patterns(filter(ccsm, time >= 1700), k = n_modes)
+noaa_patterns <- get_patterns(filter(noaa, between(time, 1901, 2010)), k = n_modes)
+```
+
+
+```{r, echo = FALSE}
+plot_amps(prism_patterns)
+plot_amps(cera_patterns) 
+plot_amps(cesm_patterns)
+plot_amps(ccsm_patterns)
+```
+Plot the EOFs
+```{r}
+plot_eofs(prism_patterns)
+plot_eofs(cera_patterns)
+plot_eofs(cesm_patterns)
+plot_eofs(ccsm_patterns)
+```
+
+Visualize the leading EOFs as correlation coefficients.
+```{r, fig.width = 7, fig.asp = .875}
+a <- ggplot() +
+  geom_stars(data = st_crop(get_correlation(prism, prism_patterns), states_wus)) +
+  geom_sf(data = states_wus, fill = NA, color = 'black') +
+  facet_wrap(~PC, nrow = 1) +
+  scale_fill_scico(palette = 'broc', limits = c(-1, 1), name = 'Correlation', na.value = NA) +
+  labs(x = 'Longitude', y = 'Latitude') +
+  theme_void()
+get_correlation(prism, prism_patterns)[states_wus]
+b <- ggplot() +
+  geom_stars(data = st_crop(get_correlation(cera, cera_patterns), states_wus) %>% 
+               split() %>% 
+               mutate(PC1 = PC1 * -1, PC2 = PC2 * -1, PC4 = PC4 * -1) %>% 
+               merge(name= 'PC')) + # the signs are arbitrary, so adjust the cera signs so the colors match prism)
+  geom_sf(data = states_wus, fill = NA, color = 'black') +
+  facet_wrap(~PC, nrow = 1) +
+  scale_fill_scico(palette = 'broc', limits = c(-1, 1), name = 'Correlation', na.value = NA) +
+  labs(x = 'Longitude', y = 'Latitude') +
+  theme_void()
+
+c <- ggplot() +
+  geom_stars(data = st_crop(get_correlation(ccsm, ccsm_patterns), states_wus) %>% 
+               split() %>%
+               mutate(PC1 = PC1 * -1,
+                      PC2 = PC2 * -1,
+                      PC3 = PC3 * -1) %>% 
+               merge(name = 'PC')) +
+  geom_sf(data = states_wus, fill = NA, color = 'black') +
+  facet_wrap(~PC, nrow = 1) +
+  scale_fill_scico(palette = 'broc', limits = c(-1, 1), name = 'Correlation', na.value = NA) +
+  labs(x = 'Longitude', y = 'Latitude') +
+  theme_void()
+
+(a / b / c) + plot_layout(guides = 'collect') + plot_annotation(tag_levels = 'a', tag_prefix = '(', tag_suffix = ')') & theme(legend.position = 'bottom')
+```
+```{r}
+states_wus
+```
+
+
+```{r}
+t1 <- st_crop(get_correlation(ccsm, ccsm_patterns), states_wus) %>% split %>% mutate(PC1 = PC1 * -1,
+         PC2 = PC2 * -1,
+         PC3 = PC3 * -1) %>% merge(name = 'PC')
+
+t2 <- st_crop(get_correlation(cera, cera_patterns), states_wus) %>% split %>% mutate(PC1 = PC1 * -1, PC2 = PC2 * -1, PC4 = PC4 * -1) %>% merge(name= 'PC')
+
+t1
+```
+
+```{r, fig.width = 7, fig.asp = .875}
+## flipped for common period
+a <- ggplot() +
+  geom_stars(data = st_crop(get_correlation(prism, prism_patterns), states_wus)) +
+  geom_sf(data = states_wus, fill = NA, color = 'black') +
+  facet_wrap(~PC, nrow = 1) +
+  scale_fill_scico(palette = 'broc', limits = c(-1, 1), name = 'Correlation', na.value = NA) +
+  labs(x = 'Longitude', y = 'Latitude') +
+  theme_void()
+
+b <- ggplot() +
+  geom_stars(data = st_crop(get_correlation(cera, cera_patterns), states_wus) %>% split %>% mutate(PC1 = PC1 * -1, PC2 = PC2 * -1, PC4 = PC4 * -1) %>% merge(name= 'PC')) + # the signs are arbitrary, so adjust the cera signs so the colors match prism)
+  geom_sf(data = states_wus, fill = NA, color = 'black') +
+  facet_wrap(~PC, nrow = 1) +
+  scale_fill_scico(palette = 'broc', limits = c(-1, 1), name = 'Correlation', na.value = NA) +
+  labs(x = 'Longitude', y = 'Latitude') +
+  theme_void()
+
+c <- ggplot() +
+  geom_stars(data = st_crop(get_correlation(ccsm, ccsm_patterns),states_wus) %>% split %>% mutate(PC1 = PC1,
+                                                                                                  PC2 = PC2,
+                                                                                                  PC3 = PC3*-1,
+                                                                                                  PC4 = PC4) %>% merge(name = 'PC')) +
+  geom_sf(data = states_wus, fill = NA, color = 'black') +
+  facet_wrap(~PC, nrow = 1) +
+  scale_fill_scico(palette = 'broc', limits = c(-1, 1), name = 'Correlation', na.value = NA) +
+  labs(x = 'Longitude', y = 'Latitude') +
+  theme_void()
+
+(a / b / c) + plot_layout(guides = 'collect') + plot_annotation(tag_levels = 'a', tag_prefix = '(', tag_suffix = ')') & theme(legend.position = 'bottom')
+```
+
+```{r}
+ggsave('eofs.png', height = 6, width = 7, dpi = 600)
+```
+
+```{r}
+ggplot() +
+geom_stars(data = st_crop(get_correlation(noaa, noaa_patterns),states_wus) %>% split %>% mutate(PC1 = PC1 * -1,
+         PC2 = PC2 * -1,
+         PC3 = PC3 * -1,
+         PC4 = PC4 * -1) %>% merge(name = 'PC')) +
+          geom_sf(data = states_wus, fill = NA, color = 'black') +
+  facet_wrap(~PC, nrow = 1) +
+scale_fill_scico(palette = 'broc', limits = c(-1, 1), name = 'Correlation', na.value = NA) +
+    labs(x = 'Longitude', y = 'Latitude') +
+  theme_void()
+
+ggplot() +
+geom_stars(data = st_crop(get_correlation(cesm, cesm_patterns),states_wus) %>% split %>% mutate(PC1 = PC1 * -1,
+         PC2 = PC2 * -1,
+         PC3 = PC3 * -1) %>% merge(name = 'PC')) +
+          geom_sf(data = states_wus, fill = NA, color = 'black') +
+  facet_wrap(~PC, nrow = 1) +
+scale_fill_scico(palette = 'broc', limits = c(-1, 1), name = 'Correlation', na.value = NA) +
+    labs(x = 'Longitude', y = 'Latitude') +
+  theme_void()
+```
+
+
+## Teleconnections
+
+Calculate the correlation between the leading 4 patterns and regional precipitation, temperature, geopotential, and SST.
+```{r}
+ppt_corr <- get_correlation(prism_clim['ppt'], prism_patterns)
+tmean_corr <- get_correlation(prism_clim['tmean'], prism_patterns)
+```
+
+Also calculate the false discovery rate, and generate points where < 0.1.
+```{r}
+ppt_sig <- get_fdr(prism_clim['ppt'], prism_patterns) %>%
+  drop_crumbs(units::set_units(100, km))  %>% 
+  smooth(method = 'ksmooth', smoothness = 5)
+
+tmean_sig <- get_fdr(prism_clim['tmean'], prism_patterns) %>%
+  drop_crumbs(units::set_units(100, km))  %>% 
+  smooth(method = 'ksmooth', smoothness = 5)
+```
+
+Plot the results.
+
+```{r}
+e <- ggplot() +
+  geom_stars(data = ppt_corr) +
+  geom_sf(data = ppt_sig, alpha = 0.65) +
+  facet_wrap(~paste0(PC, '-Precipitation'), nrow = 1) +
+  geom_sf(data = states_wus, fill = NA, color = 'black') +
+  scale_fill_scico(palette = 'vikO', limits = c(-1, 1), name = 'Correlation', na.value = NA) +
+  labs(x = 'Longitude', y = 'Latitude') +
+  theme_void()
+
+f <- ggplot() +
+  geom_stars(data = tmean_corr) +
+  geom_sf(data = tmean_sig, alpha = 0.65) +
+  geom_sf(data = states_wus, fill = NA, color = 'black') +
+  facet_wrap(~paste0(PC, '-Temperature'), nrow = 1) +
+  scale_fill_scico(palette = 'vikO', limits = c(-1, 1), name = 'Correlation', na.value = NA) +
+  labs(x = 'Longitude', y = 'Latitude') +
+  theme_void()
+
+prism_tele <- (e/f) + plot_layout(guides = 'collect') + plot_annotation(tag_levels = 'a', tag_prefix = '(', tag_suffix = ')') & theme(legend.position = 'bottom')
+prism_tele
+```
+
+```{r}
+ggsave('prism_teleconnections.png', prism_tele, width = 12, height = 12 * 0.618)
+```
+
+
+
+```{r}
+#ref raster in mollweide for reprojection
+ref <- geop[,,,1] %>%
+   st_transform("+proj=moll +lon_0=180 +ellps=WGS84 +datum=WGS84 +no_defs") %>%
+   st_bbox() %>%
+   st_as_stars(pretty = FALSE, dx = 50000)
+
+sst_corr <- get_correlation(st_warp(sst, dest = ref), prism_patterns) # change names
+geop_corr <- get_correlation(st_warp(geop, dest = ref), prism_patterns) # change names
+
+sst_sig <- get_fdr(st_warp(sst, dest = ref), prism_patterns) %>% 
+  smooth(method = 'ksmooth', smoothness = 5)
+geop_sig <- get_fdr(st_warp(geop, dest = ref), prism_patterns) %>% 
+  smooth(method = 'ksmooth', smoothness = 5)
+```
+
+
+```{r, fig.asp = .4}
+i <- ggplot() +
+  geom_stars(data = geop_corr) +
+  geom_sf(data = world, fill = 'grey20', color = NA, alpha = 0.35) +
+     geom_sf(data = geop_sig, alpha = 0.65) +
+  facet_wrap(~paste0(PC, '-Geopotential'), nrow = 1) +
+  scale_fill_scico(palette = 'vikO', limits = c(-1, 1), name = 'Correlation', na.value = NA) +
+  theme_void()
+
+j <- ggplot() +
+  geom_stars(data = sst_corr) +
+   # geom_sf(data = sst_sig, alpha = 0.65) + # not significant!
+  facet_wrap(~paste0(PC, '-SST'), nrow = 1) +
+  scale_fill_scico(palette = 'vikO', limits = c(-1, 1), name = 'Correlation', na.value = NA) +
+  geom_sf(data = world, fill = 'grey20', color = NA) +
+  theme_void()
+
+cera_tele <- (i/j) + plot_layout(guides = 'collect') + plot_annotation(tag_levels = 'a', tag_prefix = '(', tag_suffix = ')') & theme(legend.position = 'bottom')
+
+cera_tele
+```
+
+```{r}
+ggsave('cera_teleconnections.png', cera_tele, width = 12, height = 12 * 0.4)
+```
+
+
+# Coupled Pattern Analysis
+
+
+## Cross-validation
+
+Set up a 5 fold cross validation experiment for selecting the truncation level, $k$, for each set of PCs.
+
+```{r, warning = FALSE}
+cv_eot_data <- prep_eot(cera, prism, 10, 10, 10)
+```
+
+```{r, warning = FALSE, message = FALSE}
+cv_eot <- tibble(k = 1:10) %>%
+  mutate(pred = purrr::map(k, predict_eot, cv = cv_eot_data),
+         error = purrr::map(pred, cv_eot_error, obs = prism)) %>%
+  select(k, error) %>%
+  unnest_wider(error)
+```
+
+```{r}
+cv_cca <- expand_grid(kx = 1:10, ky = 1:10, kxy = 1:10) %>%
+  filter(kxy <= pmin(kx, ky)) %>%
+  mutate(cv = pmap(list(kx, ky, kxy), ~prep_cca(..1, ..2, 
+                                                preds = cera, 
+                                                obs = prism) %>% 
+                     fit_cv(fun = predict_cca, k = ..3, prism))) %>%
+  unnest_wider(cv)
+```
+```{r}
+library(profvis)
+
+prism_mon <- system.file('testdata/prism_test.RDS', package = 'tidyEOF') %>%
+  readRDS()
+
+get_patterns(filter(prism_mon), k = 1) %>% reconstruct_field(nonneg = FALSE) %>% `-`(filter(prism_mon)) %>%st_apply(1:2, function(x) sqrt(mean(x^2))) %>% plot
+
+get_patterns(filter(prism_mon), k = 36)$amplitudes
+
+profvis({
+  get_climatology(prism)
+})
+ 
+expand_grid(kx = 5, ky = 5, kxy = 5) %>%
+  filter(kxy <= pmin(kx, ky)) %>%
+  mutate(cv = pmap(list(kx, ky, kxy), ~prep_cca(..1, ..2, 
+                                                preds = cera, 
+                                                obs = prism) %>% 
+                     fit_cv(fun = predict_cca, k = ..3, prism))) %>%
+  unnest_wider(cv)
+})
+
+prism %>%
+  mutate(across(.fns = mean))
+units::set_units(prism, 'mm')
+prism %>%
+      purrr::modify2(prism, ~ units::set_units(.x, units(.y), mode = 'standard')) %>%
+      setNames(names(prism)) %>%
+      st_as_stars(dimensions = st_dimensions(prism))
+
+prism %>%
+      purrr::map2_dfc(prism, ~ units::set_units(.x, units(.y), mode = 'standard')) %>%
+      setNames(names(prism)) %>%
+      st_as_stars(dimensions = st_dimensions(prism))
+
+fit_cv
+```
+
+```{r}
+cv_cca_noa <- expand_grid(kx = 1:10, ky = 1:10, kxy = 1:10) %>%
+  filter(kxy <= pmin(kx, ky)) %>%
+  mutate(cv = pmap(list(kx, ky, kxy), ~prep_cca(..1, ..2, 
+                                                preds = noaa, 
+                                                obs = prism) %>% 
+                     fit_cv(fun = predict_cca, k = ..3, prism))) %>%
+  unnest_wider(cv)
+
+arrange(cv_cca_noa, rmse)
+arrange(cv_cca_noa, -corr)
+```
+
+
+```{r message=FALSE}
+# does this work for gams too?
+cv_pcr <- expand_grid(kx = 1:10, ky = 1:10) %>%
+  mutate(cv = map2(kx, ky, ~prep_cca(.x, .y, preds = cera, obs = prism) %>% 
+                     fit_cv(fun = predict_pcr, k = .y, obs = prism))) %>%
+  unnest_wider(cv)
+```
+
+```{r}
+# does this work for gams too?
+cv_gam <- expand_grid(kx = 1:10, ky = 1:10) %>%
+  mutate(cv = map2(kx, ky, ~prep_cca(.x, .y, preds = cera, obs = prism) %>% 
+                     fit_cv(fun = predict_gam, k = .y, obs = prism))) %>%
+  unnest_wider(cv)
+```
+
+```{r}
+cv_delta_mul <- prep_delta(cera_raw, prism) %>%
+   fit_cv(fun = delta_mul, k = NULL, obs = prism) # poor performance because of multiplicative anomalies
+
+cv_delta_add <- prep_delta(cera_raw, prism) %>%
+   fit_cv(fun = delta_add, k = NULL, obs = prism)
+```
+
+
+```{r}
+write_csv(cv_eot, 'cv_eot.csv')
+write_csv(cv_cca, 'cv_cca.csv')
+write_csv(cv_pcr, 'cv_pcr.csv')
+write_csv(cv_gam, 'cv_gam.csv')
+```
+
+
+```{r}
+cv_cca <- read_csv('cv_cca.csv')
+cv_eot <- read_csv('cv_eot.csv')
+cv_gam <- read_csv('cv_pcr.csv')
+cv_pcr <- read_csv('cv_gam.csv')
+```
+
+```{r, fig.asp = .4}
+a <- cv_cca %>%
+  group_by(kxy) %>%
+  filter(rmse == min(rmse)) %>%
+  rename(k = kxy) %>%
+  bind_rows(cv_eot, .id = 'Method') %>%
+  mutate(Method = if_else(Method == '1', 'CCA', 'EOT')) %>%
+  ggplot(aes(k, rmse)) +
+  geom_hline(yintercept = cv_delta_add[[1]], linetype = 2, alpha = 0.75) +
+  geom_line(aes(group = Method, color = Method), size = 1.2) +
+scale_color_grey() +
+  theme_bw() +
+    scale_x_continuous(breaks = 1:10, minor_breaks = NULL) +
+    labs(x = 'Coupled patterns', y = 'RMSE (mm)')
+
+b <- cv_cca %>%
+  group_by(kxy) %>%
+  filter(corr == max(corr)) %>%
+  rename(k = kxy) %>%
+  bind_rows(cv_eot, .id = 'Method') %>%
+    mutate(Method = if_else(Method == '1', 'CCA', 'EOT')) %>%
+  ggplot(aes(k, corr)) +
+    geom_hline(yintercept = cv_delta_add[[2]], linetype = 2, alpha = 0.75) +
+  geom_line(aes(group = Method, color = Method), size = 1.2) +
+scale_color_grey() +
+  theme_bw() +
+    scale_x_continuous(breaks = 1:10, minor_breaks = NULL) + 
+  labs(x = 'Coupled patterns', y = 'Domain-wide correlation')
+
+a + b + plot_layout(guides = 'collect') + plot_annotation(tag_levels = 'a', tag_prefix = '(', tag_suffix = ')')
+```
+
+```{r}
+ggsave('method_comparison.png', height = 2.4, width = 6, dpi = 600)
+```
+
+
+The cross validation routine selects `r arrange(cv_cca, rmse)[[1, 'ky']]` PRISM PCs,  `r arrange(cv_cca, rmse)[[1, 'kx']]` CERA PCs, and `r arrange(cv_cca, rmse)[[1, 'kxy']]` combined patterns for the best spatial skill.
+
+The cross validation routine selects `r arrange(cv_cca, -corr)[[1, 'ky']]` PRISM PCs,  `r arrange(cv_cca, -corr)[[1, 'kx']]` CERA PCs, and `r arrange(cv_cca, -corr)[[1, 'kxy']]` combined patterns for the best domain-wide temporal skill.
+
+```{r}
+arrange(cv_cca, rmse)
+arrange(cv_cca, -corr)
+arrange(cv_eot, rmse)
+arrange(cv_eot, -corr)
+arrange(cv_pcr, rmse)
+arrange(cv_pcr, -corr)
+arrange(cv_gam, rmse)
+arrange(cv_gam, -corr)
+cv_delta_add
+```
+
+
+```{r}
+cv_cca %>%
+  group_by(kxy) %>%
+  filter(corr == max(corr)) %>%
+  ungroup()%>%
+  arrange(kxy) %>%
+  mutate(test = corr >= lead(corr))
+
+cv_eot %>%
+  arrange(k) %>%
+  mutate(test = corr >= lead(corr))
+
+cv_cca %>%
+  group_by(kxy) %>%
+  filter(rmse == min(rmse)) %>%
+  ungroup() %>%
+  arrange(kxy) %>%
+  mutate(test = (rmse <= lead(rmse)))
+
+cv_eot %>%
+  arrange(k) %>%
+  mutate(test = (rmse <= lead(rmse)))
+```
+
+```{r, fig.width=8}
+a <- cv_cca %>%
+  group_by(kxy, kx) %>%
+  summarise(rmse = min(rmse)) %>% 
+    ggplot(aes(kx, kxy)) +
+  geom_tile(aes(fill = rmse)) +
+  scale_fill_viridis_c(direction = -1, limits = c(41.4, 54.69), breaks = seq(42, 54, 3), name = 'RMSE') +
+  theme_minimal() +
+  scale_x_continuous(breaks = 1:10, minor_breaks = NULL) +
+  scale_y_continuous(breaks = 1:10, minor_breaks = NULL) +
+  coord_fixed()
+
+b <- cv_cca %>%
+  group_by(kxy, ky) %>%
+  summarise(rmse = min(rmse)) %>% 
+    ggplot(aes(ky, kxy)) +
+  geom_tile(aes(fill = rmse)) +
+  scale_fill_viridis_c(direction = -1, limits = c(41.4, 54.69), breaks = seq(42, 54, 3), name = 'RMSE') +
+  theme_minimal() +
+  scale_x_continuous(breaks = 1:10, minor_breaks = NULL) +
+  scale_y_continuous(breaks = 1:10, minor_breaks = NULL) +
+  coord_fixed()
+
+c <- cv_cca %>%
+  group_by(kx, ky) %>%
+  summarise(rmse = min(rmse)) %>% 
+    ggplot(aes(kx, ky)) +
+  geom_tile(aes(fill = rmse)) +
+  scale_fill_viridis_c(direction = -1, limits = c(41.4, 54.69), breaks = seq(42, 54, 3), name = 'RMSE') +
+  theme_minimal() +
+  scale_x_continuous(breaks = 1:10, minor_breaks = NULL) +
+  scale_y_continuous(breaks = 1:10, minor_breaks = NULL) +
+  coord_fixed()
+
+d <- cv_cca %>%
+  group_by(kxy, kx) %>%
+  summarise(corr = max(corr)) %>% 
+    ggplot(aes(kx, kxy)) +
+  geom_tile(aes(fill = corr)) +
+  scale_fill_viridis_c(option = 'magma', direction = 1, limits = c(0.7677, 0.9405), name = 'Cor.') +
+  theme_minimal() +
+  scale_x_continuous(breaks = 1:10, minor_breaks = NULL) +
+  scale_y_continuous(breaks = 1:10, minor_breaks = NULL) +
+  coord_fixed()
+
+e <- cv_cca %>%
+  group_by(kxy, ky) %>%
+  summarise(corr = max(corr)) %>%
+    ggplot(aes(ky, kxy)) +
+  geom_tile(aes(fill = corr)) +
+  scale_fill_viridis_c(option = 'magma', direction = 1, limits = c(0.7677, 0.9405), name = 'Cor.') +
+  theme_minimal() +
+  scale_x_continuous(breaks = 1:10, minor_breaks = NULL) +
+  scale_y_continuous(breaks = 1:10, minor_breaks = NULL) +
+  coord_fixed()
+
+f <- cv_cca %>%
+  group_by(kx, ky) %>%
+  summarise(corr = max(corr)) %>% 
+    ggplot(aes(kx, ky)) +
+  geom_tile(aes(fill = corr)) +
+  scale_fill_viridis_c(option = 'magma', direction = 1, limits = c(0.7677, 0.9405), name = 'Cor.') +
+  theme_minimal() +
+  scale_x_continuous(breaks = 1:10, minor_breaks = NULL) +
+  scale_y_continuous(breaks = 1:10, minor_breaks = NULL) +
+  coord_fixed()
+
+(a + b + c + plot_layout(guides = 'collect')) / (d + e + f + plot_layout(guides = 'collect')) + plot_annotation(tag_levels = 'a', tag_prefix = '(', tag_suffix = ')')
+```
+
+```{r}
+ggsave('cca_cv.png', width = 8, height = 4.944, dpi = 600)
+```
+
+# Reconstruction
+
+```{r}
+# k's here could be taken directly from the CV results above
+recon_20c_time <- predict_cca(get_patterns(filter(cera, time >= 1982), 5), 
+            get_patterns(filter(prism, time <= 2010), 8), 
+            filter(cera), # stopgap for nonzero dimension start
+            k = 5)
+
+recon_20c_space <- predict_cca(get_patterns(filter(cera, time >= 1982), 10), 
+            get_patterns(filter(prism, time <= 2010), 9), 
+            filter(cera),
+            k = 7)
+```
+
+```{r}
+wus_stats <- get_total(prism)
+
+cera_baseline <- get_total(cera)
+
+recon_series <- get_total(recon_20c_time)
+
+#cera_baseline_ensemble <- map_dfr(1:10, ~slice(cera_ensemble, 'run', .) %>% 
+ #                                   get_total, .id = 'run') %>% 
+#  group_by(time) %>% 
+ # summarise(SWE.min = min(SWE), SWE.max = max(SWE))
+
+
+#recon_series_ensemble <- map_dfr(1:10, ~slice(cera_ensemble, 'run', .) %>% predict_cca(get_patterns(filter(., time >= 1982), 5), 
+ #           get_patterns(filter(prism, time <= 2010), 8), 
+#            .,
+#            k = 5) %>% get_total(), .id = 'run') %>%
+ #   group_by(time) %>% summarise(SWE.min = min(SWE), SWE.max = max(SWE))
+
+
+ccsm_series <- predict_cca(get_patterns(filter(cera, time >= 1982), 5), 
+            get_patterns(filter(prism, time <= 2010), 8), 
+            ccsm %>% filter(time >= 1700),
+            k = 5) %>%
+  get_total()
+
+
+
+ccsm_series_raw <- get_total(ccsm) %>% filter(time >= 1700)
+
+
+delta_baseline <- delta_add(filter(cera_raw, between(time, 1982, 2010)), 
+      filter(prism, between(time, 1982, 2010)),
+      filter(cera_raw)) %>%
+  get_total()
+
+noaa_series <- predict_cca(get_patterns(filter(noaa, between(time, 1982, 2015)), 5), 
+            get_patterns(filter(prism, time <= 2015), 5), 
+            noaa, k = 4) %>%
+  get_total()
+
+recon_20c_series_noaa <- predict_cca(get_patterns(filter(noaa, between(time, 1982, 2015)), 5), 
+            get_patterns(filter(prism, time <= 2015), 5), 
+            filter(noaa, between(time, 1901, 2010)), k = 4)
+
+noaa_series_test <- predict_cca(get_patterns(filter(cera, between(time, 1982, 2010)), 5), 
+            get_patterns(filter(prism, time <= 2010), 8), 
+            noaa * 3, k = 5) %>%
+  get_total()
+
+noaa_baseline <- get_total(noaa)
+```
+
+```{r}
+left_join(recon_series, noaa_series, by = 'time') %>%
+  filter(time >= 1950) %>%
+  summarise(cor(SWE.x, SWE.y))
+
+left_join(cera_baseline, noaa_baseline, by = 'time') %>%
+    filter(time >= 1950) %>%
+  summarise(cor(SWE.x, SWE.y))
+
+sqrt(mean(pull(filter(recon_20c_series_noaa, time > 1950) - filter(recon_20c_space, time > 1950))^2, na.rm = TRUE))
+
+sqrt(mean(pull(filter(noaa, between(time, 1950, 2010)) - filter(cera, between(time, 1950, 2010)))^2, na.rm = TRUE))
+```
+
+```{r}
+test<- st_warp(cera_raw, slice(cesm_raw, 'time', 1), use_gdal = TRUE, method = 'average') %>%
+  st_crop(st_as_sf(slice(cesm_raw, 'time', 1))) %>%
+  setNames('SWE') %>%
+  st_set_dimensions('band', values = 1901:2010, names = 'time') %>%
+  mutate(SWE = units::set_units(SWE, mm))
+
+plot(test[,,,1])
+
+cesm_series <- predict_cca(get_patterns(filter(cera, time >= 1982)%>%
+                             st_crop(st_as_sf(cesm[,,,1])), 5) ,
+            get_patterns(filter(prism, time <= 2010), 8),
+            cesm %>% filter(time >= 1700),
+            k = 5) %>%
+  get_total()
+
+cesm_raw_series <- predict_cca(get_patterns(filter(test, time >= 1982), 5) ,
+            get_patterns(filter(prism, time <= 2010), 8),
+            cesm_raw %>% filter(time >= 1700),
+            k = 5) %>%
+  get_total()
+
+cesm_baseline <- get_total(cesm) %>% filter(time > 1700)
+
+cesm_raw_baseline <- get_total(cesm_raw) %>% filter(time > 1700)
+
+
+bind_rows(cesm_series, 
+          cesm_raw_series, 
+          cesm_baseline, 
+          cesm_raw_baseline, 
+          .id = 'type') %>%
+  ggplot(aes(time, as.numeric(SWE))) +
+  geom_line(aes(color = type), alpha = .7, size = 1.2) +
+    geom_line(data = wus_stats, aes(color = 'red'), size = 1.1, alpha = .7) +
+      geom_line(data = cera_baseline, aes(color = 'grey'), size = 1.1) +
+
+  theme_bw() +
+  scale_x_continuous(limits = c(1901, 2017))
+```
+
+
+```{r fig.width=6.5}
+recon_series %>%
+  ggplot(aes(time, as.numeric(SWE))) +
+ # geom_line(data = cera_baseline_ensemble, aes(group = run, color = 'grey'), alpha = .3) +
+  #  geom_line(data = recon_series_ensemble, aes(group = run, color = 'black'), alpha = .3) +
+ geom_ribbon(data = cera_baseline_ensemble, aes(y = NA_real_, ymin = as.numeric(SWE.min), ymax = as.numeric(SWE.max), fill = 'grey'), alpha = .3) +
+    geom_ribbon(data = recon_series_ensemble, aes(y = NA_real_, ymin = as.numeric(SWE.min), ymax = as.numeric(SWE.max),  fill = 'black'), alpha = .3) +
+      geom_line(data = cera_baseline, aes(color = 'grey'), size = 1.1) +
+    geom_line(size = 1.1, aes(color = 'black')) +
+  geom_line(data = wus_stats, aes(color = 'red'), size = 1.1, alpha = .7) +
+  #uncomment to see delta approach
+  #  geom_line(data = delta_baseline, aes(color = 'black'), size = 1.1, alpha = .7, linetype = 2) +
+ # geom_line(data = noaa_series, color = 'orange') +
+#    geom_line(data = noaa_baseline, color = 'blue') +
+  #    geom_line(data = noaa_series_test, color = 'green') +
+  scale_color_identity(name = NULL,
+                          breaks = c("red", "grey", "black"),
+                          labels = c("Observations", 'Reanalysis', 'Downscaled Reanalysis'),
+                          guide = "legend") +
+    scale_fill_identity(name = NULL,
+                          breaks = c("red", "grey", "black"),
+                          labels = c("Observations", 'Reanalysis', 'Downscaled Reanalysis'),
+                          guide = "none") +
+  labs(x = 'Year', y = 'Total SWE (TL)') +
+  theme_bw() +
+  theme(legend.position = 'bottom')
+```
+
+```{r}
+#noaa test
+wus_stats %>%
+  ggplot(aes(time, as.numeric(SWE))) +
+    geom_line(data = cera_baseline, aes(color = 'grey'), size = 1.1) +
+  geom_line(size = 1.1, aes(color = 'black')) +
+  geom_line(data = noaa_baseline, aes(color = 'red'), size = 1.1, alpha = .7) +
+  #    geom_line(data = noaa_series_test, color = 'green') +
+  scale_color_identity(name = NULL,
+                          breaks = c("red", "grey", "black"),
+                          labels = c("NOAA", 'CERA', 'UA SWE Observations'),
+                          guide = "legend") +
+  labs(x = 'Year', y = 'Total SWE (TL)') +
+  theme_bw() +
+  theme(legend.position = 'bottom') +
+  scale_x_continuous(limits = c(1900, 2017))
+
+ggsave('noaa_cera_comparison_time.png', height = 4, width = 6)
+```
+
+```{r}
+ggsave('20c_recon.png', height = .6 * 6.5, width = 6.5, dpi = 600)
+```
+
+```{r}
+recon_series %>%
+  ggplot(aes(time, as.numeric(SWE))) +
+    geom_line(data = cera_baseline, aes(color = 'grey'), size = 1.1) +
+  geom_line(size = 1.1, aes(color = 'black')) +
+  geom_line(data = wus_stats, aes(color = 'red'), size = 1.1, alpha = .7) +
+  #uncomment to see delta approach
+  #  geom_line(data = delta_baseline, aes(color = 'black'), size = 1.1, alpha = .7, linetype = 2) +
+  geom_line(data = noaa_series, color = 'orange') +
+    geom_line(data = noaa_baseline, color = 'blue') +
+      geom_line(data = noaa_series_test, color = 'green') +
+
+  scale_color_identity(name = NULL,
+                          breaks = c("red", "grey", "black"),
+                          labels = c("Observations", 'Reanalysis', 'Downscaled Reanalysis'),
+                          guide = "legend") +
+  labs(x = 'Year', y = 'Total SWE (TL)') +
+  theme_bw() +
+  theme(legend.position = 'bottom') +
+  scale_x_continuous(limits = c(2000, 2017))
+```
+
+
+```{r, fig.width = 6, fig.height = 4}
+bind_rows('ccsm_recon' = ccsm_series,
+          'ccsm_raw' = ccsm_series_raw, .id = 'type') %>%
+  filter(time < 2000) %>%
+  mutate(period = floor(time / 50) * 50) %>%
+  ggplot(aes(as.numeric(SWE), fct_rev(as_factor(period)))) +
+  geom_density_ridges(alpha = .8, aes(group = interaction(period, type), fill = type)) +
+  scale_fill_manual(name = NULL,
+                          values = c('lightgrey', "darkgrey"),
+                          labels = c("Raw CCSM4", 'Downscaled CCSM4'),
+                         guide = "legend") +
+  geom_vline(xintercept= as.numeric(mean(wus_stats$SWE)), linetype = 2) +
+  ggridges::theme_ridges(grid = FALSE, center_axis_labels = TRUE) +
+  labs(x = 'Total SWE (TL)', y = 'Period')
+```
+```{r}
+ggsave('ccsm4_comparison.png', height = 4, width = 6, dpi = 600)
+```
+
+```{r}
+bind_rows('ccsm_recon' = ccsm_series,
+          'ccsm_raw' = ccsm_series_raw, .id = 'type') %>%
+  filter(time < 2000) %>%
+  mutate(period = floor(time / 50) * 50)  %>%
+  group_by(period, type) %>%
+  summarise(mean(SWE), sd(SWE)) %>%
+  pivot_wider(names_from = type, values_from = SWE)
+
+sd(wus_stats$SWE)
+```
+
+
+```{r}
+ccsm_series %>%
+  ggplot(aes(time, as.numeric(SWE))) +
+    geom_vline(xintercept = c(1783, 1817), color = 'red', linetype = 2) +
+  geom_line(data = ccsm_series_raw) +
+  geom_line(size = 1.2) +
+  scale_x_continuous(limits = c(1750, 1850))
+```
+
+```{r}
+cera_baseline %>%
+  ggplot(aes(time, as.numeric(SWE))) +
+  geom_line() +
+  geom_vline(xintercept = c(1815, 1816, 1883, 1902, 1912, 1980, 1991)) +
+  scale_x_continuous(limits = c(1800, 2000))
+```
+
+```{r}
+recon_tambora <- predict_cca(get_patterns(filter(cera, time >= 1982), 10), 
+            get_patterns(filter(prism, time <= 2010), 9), 
+            filter(ccsm, between(time, 1700, 2005)),
+            k = 7)
+```
+
+```{r}
+ggplot() +
+  geom_stars(data = recon_tambora %>% filter(between(time, 1810, 1820))) +
+  facet_wrap(~time) +
+  scale_fill_viridis_c(na.value = NA) +
+  coord_quickmap()
+  
+ggplot() +
+  geom_stars(data = (filter(recon_tambora, time == 1817) - filter(recon_tambora, time == 1815)) / filter(recon_tambora, time == 1815)) +
+  #scale_fill_scico(palette = 'vik', na.value = NA, direction = -1, limits = c(-1400, 1400)) +
+  coord_quickmap()
+```
+```{r}
+tamb_patts  <- recon_tambora %>% get_patterns(k=7)
+
+plot_amps(tamb_patts) +geom_vline(xintercept = 1817) + scale_x_continuous(limits = c(1800, 1850))
+```
+```{r}
+ggplot() +
+geom_stars(data = get_correlation(recon_tambora, tamb_patts)) +
+          geom_sf(data = states_wus, fill = NA, color = 'black') +
+  facet_wrap(~PC) +
+scale_fill_scico(palette = 'broc', limits = c(-1, 1), name = 'Correlation', na.value = NA) +
+    labs(x = 'Longitude', y = 'Latitude') +
+  theme_void()
+```
+```{r}
+tambora_anomaly <- recon_tambora %>%
+  filter(between(time, 1817, 1817)) %>%
+  units::drop_units() %>%
+  `-`(get_climatology(filter(recon_tambora, between(time, 1982, 2010)))['mean']) %>%
+  `/`(get_climatology(filter(recon_tambora, between(time, 1982, 2010)))['sd'])
+
+tambora_anomaly <- recon_tambora %>%
+  filter(between(time, 1817, 1817)) %>%
+  units::drop_units() %>%
+  `-`(get_climatology(recon_tambora)['mean']) %>%
+  `/`(get_climatology(recon_tambora)['sd'])
+
+ccsm_tambora <- ccsm %>%
+  filter(between(time, 1817, 1817)) %>%
+  units::drop_units() %>%
+  `-`(get_climatology(filter(ccsm, time > 1700))['mean']) %>%
+  `/`(get_climatology(filter(ccsm, time > 1700))['sd'])
+
+ggplot() +
+  geom_stars(data = tambora_anomaly) +
+  geom_sf(data = states_wus, fill = NA, color = 'black') +
+  scale_fill_scico(palette = 'vik', limits = c(-7.5, 7.5), direction = -1, name =  'Standard deviations', na.value = NA) +
+  theme_void()
+
+ggplot() +
+  geom_stars(data = ccsm_tambora) +
+  geom_sf(data = states_wus, fill = NA, color = 'black') +
+  scale_fill_scico(palette = 'vik', direction = -1, name =  'Standard deviations', na.value = NA) +
+  theme_void()
+```
+
+
+
+
+
+```{r}
+ccsm_prec %>% 
+  {. * st_area(.)} %>%
+  st_apply(3, function(x) sum(x, na.rm = TRUE)) %>%
+  as_tibble() %>%
+  filter(time > 1700) %>%
+  left_join(ccsm_series_raw) %>%
+  summarise(cor(pr, SWE))
+
+ccsm_prec %>% 
+  {. * st_area(.)} %>%
+  st_apply(3, function(x) sum(x, na.rm = TRUE)) %>%
+  as_tibble() %>%
+  filter(time > 1700) %>%
+  left_join(ccsm_series) %>%
+  summarise(cor(pr, SWE))
+
+
+ccsm_temp %>% 
+  {. * st_area(.)} %>%
+  st_apply(3, function(x) mean(x, na.rm = TRUE)) %>%
+    as_tibble() %>%
+  filter(time > 1700) %>%
+  left_join(ccsm_series_raw) %>%
+  summarise(cor(tas, SWE))
+
+ccsm_temp %>% 
+ # {. * st_area(.)} %>%
+  st_apply(3, function(x) mean(x, na.rm = TRUE)) %>%
+    as_tibble() %>%
+  filter(time > 1700) %>%
+  left_join(ccsm_series) %>%
+  summarise(cor(tas, SWE))
+```
+
+
+```{r fig.width = 6.5, fig.asp = .5}
+cera_anomaly <- cera %>%
+  filter(between(time, 1982, 2010)) %>%
+  units::drop_units() %>%
+  `-`(get_climatology(filter(cera, between(time, 1982, 2010)))['mean']) %>%
+  `/`(get_climatology(filter(cera, between(time, 1982, 2010)))['sd']) %>%
+  filter(time == 1997) 
+
+recon_anomaly <- recon_20c_space %>%
+  filter(between(time, 1982, 2010)) %>%
+  units::drop_units() %>%
+  `-`(get_climatology(filter(recon_20c_space, between(time, 1982, 2010)))['mean']) %>%
+  `/`(get_climatology(filter(prism, between(time, 1982, 2010)))['sd']) %>%
+  filter(time == 1997) 
+
+prism_anomaly <- prism %>%
+  filter(between(time, 1982, 2010)) %>%
+  units::drop_units() %>%
+  `-`(get_climatology(filter(prism, between(time, 1982, 2010)))['mean']) %>%
+  `/`(get_climatology(filter(prism, between(time, 1982, 2010)))['sd']) %>%
+  filter(time == 1997) 
+
+a <- ggplot() +
+  geom_stars(data = cera_anomaly) +
+  geom_sf(data = states_wus, fill = NA, color = 'black') +
+  scale_fill_scico(palette = 'vik', direction = -1, limits = c(-5.2,5.2), name =  'Standard deviations', na.value = NA) +
+  theme_void()
+
+b <-  ggplot() +
+  geom_stars(data = recon_anomaly) +
+  geom_sf(data = states_wus, fill = NA, color = 'black') +
+  scale_fill_scico(palette = 'vik', direction = -1, limits = c(-5.2, 5.2), name =  'Standard deviations', na.value = NA) +
+  theme_void()
+
+c <- ggplot() +
+  geom_stars(data = prism_anomaly)  +
+  geom_sf(data = states_wus, fill = NA, color = 'black') +
+  scale_fill_scico(palette = 'vik', direction = -1, limits = c(-5.2, 5.2), name = 'Standard deviations', na.value = NA) +
+  theme_void()
+
+a + b + c + plot_layout(guides = 'collect') + plot_annotation(tag_levels = 'a', tag_prefix = '(', tag_suffix = ')') & theme(legend.position = 'bottom')
+```
+```{r}
+ggsave('anomalies_1997.png', height = 3.25, width = 6.5, dpi = 600)
+```
+
+
+```{r}
+
+prism_clim['tmean'] %>%   
+#  {. * st_area(.)} %>%
+  st_apply(3, function(x) mean(x, na.rm = TRUE)) %>%
+    as_tibble() %>% ggplot(aes(time, tmean)) + geom_line()
+```
+```{r}
+prism_clim['tmean'] %>%   
+#  {. * st_area(.)} %>%
+  st_apply(3, function(x) mean(x, na.rm = TRUE)) %>%
+    as_tibble() %>%
+  filter(time <= 2010) %>%
+  filter(percent_rank(tmean)>= .8)
+```
+
+```{r}
+hot_years <- predict_cca(get_patterns(filter(cera, time >= 1982) %>% filter(!(time %in% c(1992, 1999, 2000, 2003, 2004, 2005))) , 5), 
+            get_patterns(filter(prism, time <= 2010)%>% filter(!(time %in% c(1992, 1999, 2000, 2003, 2004, 2005))), 8), 
+            filter(cera, time %in% c(1992, 1999, 2000, 2003, 2004, 2005)),
+            k = 5)
+```
+
+```{r}
+hot_years %>% get_total %>%
+  left_join(wus_stats, by = 'time') %>%
+  left_join(recon_series, by = 'time') %>%
+  select(-time) %>%
+  cor
+```
+
+```{r}
+hot_years_space <- predict_cca(get_patterns(filter(cera, time >= 1982) %>% filter(!(time %in% c(1992, 1999, 2000, 2003, 2004, 2005))) , 10), 
+            get_patterns(filter(prism, time <= 2010)%>% filter(!(time %in% c(1992, 1999, 2000, 2003, 2004, 2005))), 9), 
+            filter(cera, time %in% c(1992, 1999, 2000, 2003, 2004, 2005)),
+            k = 7)
+
+hot_years_space - filter(prism, time %in% c(1992, 1999, 2000, 2003, 2004, 2005))
+
+
+sqrt(mean(pull(hot_years_space - filter(prism, time %in% c(1992, 1999, 2000, 2003, 2004, 2005)))^2, na.rm = TRUE))
+```
+
+## Comparison to SNOTEL data.
+
+What are these data . . . are they march mean or april 1st.
+```{r}
+mat <- readMat('../../snow-wna/data/snow.mat')
+
+site_dat <- mat$snow[c(2:6,10),1,1] %>% 
+  map_dfc(unlist) %>%
+  mutate(id = str_sub(id, 1, -2),
+         HUC = str_sub(HUC, 1, -2)) %>%
+  bind_cols(map_dfc(mat$snow[7:9,1,1], c)) %>%
+  st_as_sf(coords = c('lon', 'lat'), crs = 4326)
+plot(site_dat)
+
+years <- c(mat$snow[[11,1,1]])
+
+swe <- mat$snow[[1,1,1]][,-1597]  # the last column is a blank duplicated one
+#swe[is.nan(swe)] <- NA
+
+swe_dat <- swe %>% 
+  `rownames<-`(years) %>% 
+ # `colnames<-`(site_dat$name) %>%
+  t() %>%
+  as_tibble() %>%
+  bind_cols(select(site_dat, geometry), .) %>%
+  st_as_stars() %>%
+  merge(name = 'time') %>%
+  setNames('swe') %>%
+  st_set_dimensions('time', values = parse_number(st_get_dimension_values(., 'time'))) %>% 
+  filter(time >= 1910)
+```
+
+So there needs to be more dat cleaning . . . maybe some of the sites are overlapping and/or from a different network? ... yes it looks like there are 41 overlaps? or 103. wait. so there is the correct number of of unique site ids, but 103 fewer unique site names. ok got it. so some are names repeated at multiple sites with common names like bear basin. other are snow course snotel sites at the same location . . . look into this
+
+```{r}
+length(unique(site_dat$id)) == length(unique(site_dat$name))
+length(unique(site_dat$id)) - length(unique(site_dat$name))
+
+duplicate_names <- site_dat %>% st_drop_geometry %>% count(name) %>% filter(n > 1) %>% pull(name)
+site_dat %>% filter(name %in% duplicate_names) %>% arrange(name)
+```
+
+```{r}
+st_apply(swe_dat, 'geometry', function(x) all(is.na(x)), .fname = 'all_na') %>% 
+  st_as_sf() %>%
+  st_join(site_dat, join = st_equals_exact, par = .0000000001) %>% plot
+
+site_dat
+```
+
+
+
+Compare the raw SNOTEL and snow course data to the PRISM-based UA-SWE product.
+```{r}
+st_extract(prism, site_dat) %>% 
+  filter(between(time, 1982, 2015)) %>%
+  c(filter(swe_dat, between(time, 1982, 2015))) %>%
+  as_tibble() %>%
+  units::drop_units() %>%
+  ggplot(aes(SWE,swe)) +
+  geom_point(alpha = .1) +
+  geom_abline(color = 'red')
+```
+```{r}
+st_extract(recon_20c_space, site_dat) %>% 
+  filter(between(time, 1910, 2010)) %>%
+  c(filter(swe_dat, between(time, 1910, 2010))) %>%
+  as_tibble() %>%
+  units::drop_units() %>%
+  ggplot(aes(SWE,swe)) +
+  geom_point() +
+  geom_abline(color = 'red')
+```
+```{r}
+# when internet is available, google how do do this the stars way!
+st_extract(recon_20c_space, site_dat) %>% 
+  filter(between(time, 1910, 2010)) %>%
+  c(filter(swe_dat, between(time, 1910, 2010))) %>% 
+  st_apply('geometry', function(x) cor(x['SWE'], x['swe'], use = 'pairwise.complete.obs'))# %>% plot
+  mutate(SWE = units::drop_units(SWE)) %>%
+  st_apply('geometry', function(x) cor(x[1], x[2], use = 'pairwise.complete.obs'), .fname = 'cor', rename = TRUE) #%>%
+  plot
+  summarise(cor = cor(SWE, swe, use = 'complete.obs'))
+  ggplot(aes(SWE,swe)) +
+  geom_point() +
+  geom_abline(color = 'red')
+```
+```{r}
+st_extract(recon_20c_space, site_dat) %>% 
+  filter(between(time, 1910, 2010)) %>%
+  c(filter(swe_dat, between(time, 1910, 2010))) %>%
+  as_tibble() %>% 
+  mutate(x = st_coordinates(geometry)[,1],
+         y = st_coordinates(geometry)[,2]) %>%
+  select(-geometry) %>%
+  group_by(x,y) %>%
+  summarise(cor = cor(units::drop_units(SWE), swe, use = 'pairwise.complete.obs')) %>%
+  arrange(cor) %>%
+  remove_missing() %>%
+  ggplot() +
+  geom_point(aes(x, y, color = cor)) +
+  scale_color_viridis_c() +
+  geom_sf(data = states_wus, fill = NA) +
+  theme_void()
+```
+
+```{r}
+# this is delta method
+delta_add(filter(cera_raw, between(time, 1982, 2010)), 
+      filter(prism, between(time, 1982, 2010)),
+      cera_raw) %>%
+  st_extract(site_dat) %>% 
+  filter(between(time, 1910, 2010)) %>%
+  c(filter(swe_dat, between(time, 1910, 2010))) %>%
+  as_tibble() %>% 
+  mutate(x = st_coordinates(geometry)[,1],
+         y = st_coordinates(geometry)[,2]) %>%
+  select(-geometry) %>%
+  group_by(x,y) %>%
+  summarise(cor = cor(units::drop_units(SWE), swe, use = 'pairwise.complete.obs')) %>%
+  arrange(cor) %>%
+  remove_missing() %>%
+  ggplot() +
+  geom_point(aes(x, y, color = cor)) +
+  scale_color_viridis_c() +
+  geom_sf(data = states_wus, fill = NA) +
+  theme_void()
+# we're getting some negative correlations here!so its important to compare to the baseline
+```
+```{r}
+left_join(
+st_extract(recon_20c_space, site_dat) %>% 
+  filter(between(time, 1910, 2010)) %>%
+  c(filter(swe_dat, between(time, 1910, 2010))) %>%
+  as_tibble() %>% 
+  mutate(x = st_coordinates(geometry)[,1],
+         y = st_coordinates(geometry)[,2]) %>%
+  select(-geometry) %>%
+  group_by(x,y) %>%
+  summarise(cor = cor(units::drop_units(SWE), swe, use = 'pairwise.complete.obs'), .groups = 'drop') ,
+
+delta_add(filter(cera_raw, between(time, 1982, 2010)), 
+      filter(prism, between(time, 1982, 2010)),
+      cera_raw) %>%
+  st_extract(site_dat) %>% 
+  filter(between(time, 1910, 2010)) %>%
+  c(filter(swe_dat, between(time, 1910, 2010))) %>%
+  as_tibble() %>% 
+  mutate(x = st_coordinates(geometry)[,1],
+         y = st_coordinates(geometry)[,2]) %>%
+  select(-geometry) %>%
+  group_by(x,y) %>%
+  summarise(cor = cor(units::drop_units(SWE), swe, use = 'pairwise.complete.obs'), .groups = 'drop'),
+by = c('x', 'y')) %>%
+  mutate(test = cor.x - cor.y) %>% # there are 6 cases where the delta method is negatively correlated with the observations!, and none where the cca version is, so its ok to do this simple difference
+    arrange(abs(test)) %>%
+  remove_missing() %>%
+  ggplot() +
+  geom_point(aes(x, y, color = test)) +
+  scale_color_viridis_c(option = 'magma', limits = c(-0.8, 0.8)) +
+  #scale_color_scico(palette = 'vik', limits = c(-0.8, 0.8)) +
+  geom_sf(data = states_wus, fill = NA) +
+  theme_void()
+# so ccamostly improves the correlations relative to the delta baseline, although not everywhere! is there something that seems to make a difference?
+```
+
+```{r}
+# so now do rmse
+
+left_join(
+st_extract(recon_20c_space, site_dat) %>% 
+  filter(between(time, 1910, 2010)) %>%
+  c(filter(swe_dat, between(time, 1910, 2010))) %>%
+  as_tibble() %>% 
+  mutate(x = st_coordinates(geometry)[,1],
+         y = st_coordinates(geometry)[,2]) %>%
+  select(-geometry) %>%
+  group_by(x,y) %>%
+  summarise(rmse = sqrt(mean((units::drop_units(SWE) - swe)^2, na.rm = TRUE)) , .groups = 'drop') ,
+
+delta_add(filter(cera_raw, between(time, 1982, 2010)), 
+      filter(prism, between(time, 1982, 2010)),
+      cera_raw) %>%
+  st_extract(site_dat) %>% 
+  filter(between(time, 1910, 2010)) %>%
+  c(filter(swe_dat, between(time, 1910, 2010))) %>%
+  as_tibble() %>% 
+  mutate(x = st_coordinates(geometry)[,1],
+         y = st_coordinates(geometry)[,2]) %>%
+  select(-geometry) %>%
+  group_by(x,y) %>%
+  summarise(rmse = sqrt(mean((units::drop_units(SWE) - swe)^2, na.rm = TRUE)) , .groups = 'drop') ,
+by = c('x', 'y')) %>%
+  mutate(test = rmse.x - rmse.y) %>% # there are 6 cases where the delta method is negatively correlated with the observations!, and none where the cca version is, so its ok to do this simple difference
+    arrange(abs(test)) %>%
+  remove_missing() %>% 
+  ggplot() +
+  geom_point(aes(x, y, color = test)) +
+  scale_color_scico(palette = 'vik', limits = c(-204, 204), name = 'RMSE\nDifference') +
+  #scale_color_viridis_c(direction = -1, limits = c(-203.1, 0)) +
+  geom_sf(data = states_wus, fill = NA) +
+  theme_void()
+```
+```{r}
+ggsave('snotel_rmse.png', height = 6 * 0.618, width = 6, dpi = 300)
+```
+
+
+```{r}
+
+st_extract(prism, site_dat) %>% 
+  filter(between(time, 1982, 2010)) %>%
+  c(filter(swe_dat, between(time, 1982, 2010))) %>%
+  as_tibble() %>% 
+  mutate(x = st_coordinates(geometry)[,1],
+         y = st_coordinates(geometry)[,2]) %>%
+  select(-geometry) %>%
+  group_by(x,y) %>%
+  summarise(rmse = sqrt(mean((units::drop_units(SWE) - swe)^2, na.rm = TRUE)) , .groups = 'drop') %>%
+    arrange(rmse) %>%
+  remove_missing() %>%
+  ggplot() +
+  geom_point(aes(x, y, color = rmse)) +
+  scale_color_viridis_c() +
+  geom_sf(data = states_wus, fill = NA) +
+  theme_void()
+st_extract(recon_20c_space, site_dat) %>% 
+  filter(between(time, 1982, 2010)) %>%
+  c(filter(swe_dat, between(time, 1982, 2010))) %>%
+  as_tibble() %>% 
+  mutate(x = st_coordinates(geometry)[,1],
+         y = st_coordinates(geometry)[,2]) %>%
+  select(-geometry) %>%
+  group_by(x,y) %>%
+  summarise(rmse = sqrt(mean((units::drop_units(SWE) - swe)^2, na.rm = TRUE)) , .groups = 'drop') %>%
+    arrange(rmse) %>%
+  remove_missing() %>%
+  ggplot() +
+  geom_point(aes(x, y, color = rmse)) +
+  scale_color_viridis_c() +
+  geom_sf(data = states_wus, fill = NA) +
+  theme_void()
+
+left_join(
+st_extract(recon_20c_space, site_dat) %>% 
+  filter(between(time, 1982, 2010)) %>%
+  c(filter(swe_dat, between(time, 1982, 2010))) %>%
+  as_tibble() %>% 
+  mutate(x = st_coordinates(geometry)[,1],
+         y = st_coordinates(geometry)[,2]) %>%
+  select(-geometry) %>%
+  group_by(x,y) %>%
+  summarise(rmse = sqrt(mean((units::drop_units(SWE) - swe)^2, na.rm = TRUE)) , .groups = 'drop') ,
+
+ st_extract(prism, site_dat) %>% 
+  filter(between(time, 1982, 2010)) %>%
+  c(filter(swe_dat, between(time, 1982, 2010))) %>%
+  as_tibble() %>% 
+  mutate(x = st_coordinates(geometry)[,1],
+         y = st_coordinates(geometry)[,2]) %>%
+  select(-geometry) %>%
+  group_by(x,y) %>%
+  summarise(rmse = sqrt(mean((units::drop_units(SWE) - swe)^2, na.rm = TRUE)) , .groups = 'drop') ,
+by = c('x', 'y')) %>%
+  mutate(test = rmse.x - rmse.y) %>% # there are 6 cases where the delta method is negatively correlated with the observations!, and none where the cca version is, so its ok to do this simple difference
+    arrange(abs(test)) %>%
+  remove_missing() %>%
+  ggplot() +
+  geom_point(aes(x, y, color = test)) +
+  scale_color_distiller(palette = 'RdBu', limits = c(-100, 100)) +
+  geom_sf(data = states_wus, fill = NA) +
+  theme_void()
+# this says that in almost all cases the rmse of the recon is more than the prism data -- but we know that because thats the nature of the modeling! . . . i suppose another analysis would minimize the rmse in the snotel measurements?
+```
+```{r}
+# number of non null observations over time
+swe_dat %>% st_as_sf %>% st_drop_geometry() %>%is.na %>% `!`(.) %>% colSums() %>% qplot(x = 1910:2015, y = ., geom = 'point')
+```
+```{r}
+swe %>% 
+  `rownames<-`(years) %>% 
+ # `colnames<-`(site_dat$name) %>%
+ # t() %>%
+  as_tibble(rownames = 'time') %>%
+  bind_cols(select(site_dat, geometry), .) %>%
+  st_as_stars() %>%
+  merge(name = 'time') %>%
+  setNames('swe') %>%
+  st_set_dimensions('time', values = parse_number(st_get_dimension_values(., 'time'))) %>% 
+  filter(time >= 1910)
+```
+```{r}
+
+left_join(
+st_extract(recon_20c_space, site_dat) %>% 
+  filter(between(time, 1910, 2010)) %>%
+  c(filter(swe_dat, between(time, 1910, 2010))) %>%
+  as_tibble() %>% 
+  mutate(x = st_coordinates(geometry)[,1],
+         y = st_coordinates(geometry)[,2]) %>%
+  select(-geometry) %>%
+  group_by(x,y) %>%
+  summarise(rmse = sqrt(mean((units::drop_units(SWE) - swe)^2, na.rm = TRUE)) , .groups = 'drop') ,
+
+delta_add(filter(cera_raw, between(time, 1982, 2010)), 
+      filter(prism, between(time, 1982, 2010)),
+      cera_raw) %>%
+  st_extract(site_dat) %>% 
+  filter(between(time, 1910, 2010)) %>%
+  c(filter(swe_dat, between(time, 1910, 2010))) %>%
+  as_tibble() %>% 
+  mutate(x = st_coordinates(geometry)[,1],
+         y = st_coordinates(geometry)[,2]) %>%
+  select(-geometry) %>%
+  group_by(x,y) %>%
+  summarise(rmse = sqrt(mean((units::drop_units(SWE) - swe)^2, na.rm = TRUE)) , .groups = 'drop') ,
+by = c('x', 'y')) %>%
+  pivot_longer(-c(x, y)) %>%
+  ggplot() +
+  geom_density(aes(value, fill = name), alpha = .5) +
+  scale_x_log10()
+
+# no site level aggregation now -- why error?
+left_join(
+st_extract(recon_20c_space, site_dat) %>% 
+  filter(between(time, 1910, 2010)) %>%
+  c(filter(swe_dat, between(time, 1910, 2010))) %>%
+  as_tibble() %>% 
+  mutate(x = st_coordinates(geometry)[,1],
+         y = st_coordinates(geometry)[,2]) %>%
+  select(-geometry) %>%
+  summarise(rmse = sqrt(mean((units::drop_units(SWE) - swe)^2, na.rm = TRUE)) , .groups = 'drop') ,
+
+delta_add(filter(cera_raw, between(time, 1982, 2010)), 
+      filter(prism, between(time, 1982, 2010)),
+      cera_raw) %>%
+  st_extract(site_dat) %>% 
+  filter(between(time, 1910, 2010)) %>%
+  c(filter(swe_dat, between(time, 1910, 2010))) %>%
+  as_tibble() %>% 
+  mutate(x = st_coordinates(geometry)[,1],
+         y = st_coordinates(geometry)[,2]) %>%
+  select(-geometry) %>%
+  summarise(rmse = sqrt(mean((units::drop_units(SWE) - swe)^2, na.rm = TRUE)) , .groups = 'drop') ,
+by = c('x', 'y')) %>%
+  pivot_longer(-c(x, y)) %>%
+  ggplot() +
+  geom_density(aes(value, fill = name), alpha = .5) +
+  scale_x_log10()
+```
+
+
+```{r}
+all_na <- st_apply(swe_dat, 'geometry', function(x) all(is.na(x)), .fname = 'all_na')
+all_na %>% st_as_sf() %>% count(all_na)
+ggplot() +
+  geom_sf(data = st_as_sf(all_na), aes(color = swe)) +
+  scale_color_viridis_d() +
+  geom_sf(data = states_wus, fill = NA)
+```
+
+
+## Save final reconstruction.
+```{r}
+write_stars(recon_20c_space, 'swe_wus_CERA_downscaled.tif')
+```
+

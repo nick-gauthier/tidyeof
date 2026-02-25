@@ -2,13 +2,24 @@
 % Please edit documentation in R/prep_cv.R
 \name{prep_folds}
 \alias{prep_folds}
-\title{Title}
+\title{Prepare contiguous cross-validation folds}
 \usage{
 prep_folds(times, kfolds = 5)
 }
 \arguments{
-\item{kfolds}{}
+\item{times}{Vector of time values to split}
+
+\item{kfolds}{Number of folds (default 5)}
+}
+\value{
+List of k vectors, each containing the time values for that fold
 }
 \description{
-Title
+Divides time steps into k contiguous folds for temporal cross-validation.
+Folds are kept contiguous to preserve temporal structure.
+}
+\seealso{
+[prep_cv_folds()] for preparing complete CV folds with pre-computed patterns
+
+[tune_cca()] for hyperparameter grid search
 }

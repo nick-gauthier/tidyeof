@@ -2,13 +2,31 @@
 % Please edit documentation in R/modified_ruleN.R
 \name{eigen_test}
 \alias{eigen_test}
-\title{Title}
+\title{Test EOF significance using modified Rule N}
 \usage{
-eigen_test(lambdas, k, M, n)
+eigen_test(lambdas, k, M, n, p = 0.05)
 }
 \arguments{
-\item{n}{}
+\item{lambdas}{Vector of eigenvalues from PCA}
+
+\item{k}{Index of eigenvalue to test}
+
+\item{M}{Number of spatial points (grid cells)}
+
+\item{n}{Number of time steps}
+
+\item{p}{Significance level (default 0.05)}
+}
+\value{
+Logical, TRUE if eigenvalue is significant at level p
 }
 \description{
-Title
+Tests whether the k-th eigenvalue is significantly different from noise
+using a modified Rule N approach based on Tracy-Widom distribution.
+}
+\details{
+Based on the gamma approximation to the Tracy-Widom distribution described
+in Cheng & Wallace (1993) and implemented following Overland & Preisendorfer
+(1982). Constants (shape = 46.4, scale factor = 0.186, location = 9.85)
+derive from fitting the gamma CDF to the Tracy-Widom Type 1 distribution.
 }

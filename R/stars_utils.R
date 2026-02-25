@@ -1,0 +1,103 @@
+#' Flatten a time-indexed stars object into a matrix
+#'
+#' Internal helper to turn a single-attribute stars object with a `time`
+#' dimension into a matrix of shape time x space along with the metadata needed
+#' to reconstruct the original spatial layout.
+#'
+#' @param dat A stars object with a `time` dimension
+#' @return A list containing the flattened matrix, spatial dimension names,
+#'   their lengths, and coordinate values
+#' @keywords internal
+flatten_time_space <- function(dat) {
+  check_stars_object(dat)
+
+  if (length(dat) != 1) {
+    dat <- dat[1]
+  }
+
+  dims <- stars::st_dimensions(dat)
+  if (!"time" %in% names(dims)) {
+    cli::cli_abort("Object must contain a {.field time} dimension to be flattened.")
+  }
+
+  spatial_dims <- setdiff(names(dims), "time")
+  permuted <- aperm(dat, c("time", spatial_dims))
+  arr <- permuted[[1]]
+  mat <- matrix(arr, nrow = dim(arr)[1], ncol = prod(dim(arr)[-1]))
+
+  spatial_values <- purrr::map(spatial_dims, ~stars::st_get_dimension_values(permuted, .x))
+  names(spatial_values) <- spatial_dims
+
+  list(
+    matrix = mat,
+    spatial_dims = spatial_dims,
+    spatial_shape = dim(arr)[-1],
+    spatial_values = spatial_values
+  )
+}
+
+#' Convert a time-by-space matrix back to a stars object
+#'
+#' @param mat Matrix with rows = time, columns = flattened spatial cells
+#' @param template_eofs EOF stars object providing spatial metadata
+#' @param spatial_template Stars object supplying spatial dimension metadata
+#'   (e.g., the climatology)
+#' @param valid_pixels Integer indices of spatial cells with valid data
+#' @param times Vector of time values
+#' @param var_names Character vector of attribute names for the result
+#' @keywords internal
+matrix_to_spacetime <- function(mat,
+                                template_eofs,
+                                spatial_template,
+                                valid_pixels,
+                                times,
+                                var_names) {
+  dims <- stars::st_dimensions(template_eofs)
+  if (!"PC" %in% names(dims)) {
+    cli::cli_abort("Template EOFs must include a {.field PC} dimension.")
+  }
+
+  spatial_dims <- setdiff(names(dims), "PC")
+  spatial_sizes <- purrr::map_int(spatial_dims, ~dimension_size(dims[[.x]]))
+  total_space <- prod(spatial_sizes)
+
+  full_mat <- matrix(NA_real_, nrow = nrow(mat), ncol = total_space)
+  full_mat[, valid_pixels] <- mat
+
+  out_array <- array(t(full_mat), dim = c(spatial_sizes, nrow(mat)))
+
+  spatial_template_dims <- stars::st_dimensions(spatial_template)
+  spatial_dim_names <- intersect(names(spatial_template_dims), spatial_dims)
+
+  new_dims <- spatial_template_dims[spatial_dim_names]
+
+  time_dim <- list(
+    from = 1,
+    to = nrow(mat),
+    offset = NA_real_,
+    delta = NA_real_,
+    refsys = if (inherits(times, "POSIXct")) attr(times, "tzone") else if (inherits(times, "Date")) "Date" else NA_character_,
+    point = FALSE,
+    values = times
+  )
+  class(time_dim) <- "dimension"
+
+  new_dims$time <- time_dim
+  class(new_dims) <- "dimensions"
+
+  out <- stars::st_as_stars(out_array, dimensions = new_dims)
+
+  setNames(out, var_names)
+}
+
+#' Obtain the size of a stars dimension definition
+#' @keywords internal
+dimension_size <- function(dimension) {
+  if (!is.null(dimension$values)) {
+    length(dimension$values)
+  } else if (!is.null(dimension$from) && !is.null(dimension$to)) {
+    dimension$to - dimension$from + 1
+  } else {
+    cli::cli_abort("Unable to determine dimension length from metadata.")
+  }
+}

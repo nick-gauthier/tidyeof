@@ -1,0 +1,57 @@
+url: https://nick-gauthier.github.io/tidyEOF/
+
+template:
+  bootstrap: 5
+
+reference:
+  - title: "Core EOF Analysis"
+    desc: "Extract and work with EOF patterns"
+    contents:
+      - patterns
+      - project_patterns
+      - project_patterns_multiple
+      - reconstruct
+      - area_weights
+
+  - title: "Climatology"
+    desc: "Compute and restore climatological baselines"
+    contents:
+      - get_climatology
+      - get_anomalies
+      - restore_climatology
+
+  - title: "CCA Downscaling"
+    desc: "Couple patterns and make predictions"
+    contents:
+      - couple
+      - starts_with("get_canonical")
+
+  - title: "Common Patterns"
+    desc: "Joint EOF analysis across datasets"
+    contents:
+      - common_patterns
+
+  - title: "Cross-Validation"
+    desc: "Tune hyperparameters"
+    contents:
+      - prep_folds
+      - prep_cv_folds
+      - tune_eof
+      - tune_cca
+      - summarize_cv
+      - summarize_eof_cv
+
+  - title: "Diagnostics"
+    desc: "Significance testing and visualization"
+    contents:
+      - eigen_test
+      - get_correlation
+      - get_fdr
+
+articles:
+  - title: "Getting Started"
+    navbar: ~
+    contents:
+      - eof-analysis
+      - downscaling
+      - cross-validation

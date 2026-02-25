@@ -1,41 +1,74 @@
-#' Title
+#' Reconstruct spatial field from EOF amplitudes
 #'
-#' @param target_patterns
-#' @param amplitudes
+#' Converts PC amplitudes back into a full spatial-temporal field by multiplying
+#' by the EOF patterns and adding back the climatology.
 #'
-#' @return
+#' @param target_patterns A patterns object containing EOFs and climatology
+#' @param amplitudes Amplitudes to use for reconstruction. Can be:
+#'   - NULL (default): uses original amplitudes from target_patterns
+#'   - tibble: with time column and PC columns
+#'   - stars object: will be projected onto patterns first
+#'
+#' @details
+#' For bounded variables like precipitation, the reconstructed field may contain
+#' small negative values due to EOF truncation. To clamp these, use
+#' `mutate(result, across(everything(), ~pmax(.x, 0 * .x)))` (the `0 * .x`
+#' trick preserves units).
+#'
+#' @return A stars object with reconstructed spatial-temporal data
 #' @export
-#'
-#' @examples
-reconstruct_field <- function(target_patterns, amplitudes = NULL, nonneg = TRUE) {
+reconstruct <- function(target_patterns, amplitudes = NULL) {
+  validate_patterns(target_patterns)
+
   if(is.null(amplitudes)) amplitudes <- target_patterns$amplitudes
-  if(is(amplitudes, 'stars')) amplitudes <- project_patterns(target_patterns, amplitudes)
-  # is there a more robust way to do nonneg?
-  # check (ncol(amplitudes) - 1) == number of PCs in eofs?
-  # check margin 3 is time?
+  if(inherits(amplitudes, 'stars')) amplitudes <- project_patterns(target_patterns, amplitudes)
 
-  # this should work on new -raw- data and get the pc projection like cca
+  # With Hannachi-style handling we store EOFs in physical units and PCs as
+  # unscaled scores, so multiplying amplitudes by EOFs yields anomalies directly
 
-  anomalies <- amplitudes %>%
-    rowwise() %>%
-    mutate(PCs = list(c_across(-time)), .keep = 'unused') %>%
-    ungroup() %>%
-    tibble::deframe() %>%
-    purrr::map(~sweep(target_patterns$eofs, MARGIN = 3, STATS = .x, FUN = "*")) %>%
-    do.call('c', .) %>%
-    stars::st_apply(1:2, sum) %>%
-    merge(name = 'time') %>%
-    stars::st_set_dimensions('time', values = amplitudes$time) %>%
-    setNames(target_patterns$names)
+  amps_matrix <- amplitudes %>%
+    dplyr::select(-time) %>%
+    as.matrix()
+
+  if (ncol(amps_matrix) != target_patterns$k) {
+    cli::cli_abort(
+      "Amplitude matrix columns ({ncol(amps_matrix)}) must match {.field k} ({target_patterns$k})."
+    )
+  }
+
+  eof_array <- target_patterns$eofs[[1]]
+  spatial_sizes <- dim(eof_array)[-length(dim(eof_array))]
+  eof_matrix <- matrix(eof_array,
+                       nrow = prod(spatial_sizes),
+                       ncol = target_patterns$k)
+
+  valid_pixels <- target_patterns$valid_pixels
+  eof_valid <- eof_matrix[valid_pixels, , drop = FALSE]
+
+  anomalies_valid <- amps_matrix %*% t(eof_valid)
+
+  anomalies <- matrix_to_spacetime(
+    anomalies_valid,
+    template_eofs = target_patterns$eofs,
+    spatial_template = target_patterns$climatology$mean,
+    valid_pixels = valid_pixels,
+    times = amplitudes$time,
+    var_names = target_patterns$names
+  )
 
   final <- restore_climatology(anomalies,
                                clim = target_patterns$climatology,
                                scale = target_patterns$scaled,
                                monthly = target_patterns$monthly)
 
-  if(target_patterns$weight) final <- final / lat_weights(final)
-  if(nonneg) final <- mutate(final, across(everything(), ~if_else(.x < 0, 0, .x)))
+  # Restore units for each variable
+  if(!is.null(target_patterns$units) && any(!sapply(target_patterns$units, is.null))) {
+    for(var_name in names(target_patterns$units)) {
+      if(!is.null(target_patterns$units[[var_name]])) {
+        final[[var_name]] <- units::set_units(final[[var_name]], target_patterns$units[[var_name]], mode = 'standard')
+      }
+    }
+  }
 
-  final %>%
-    mutate(across(everything(), ~units::set_units(.x, target_patterns$units, mode = 'standard'))) # replace with modify2 for multiple variables?
+  final
 }

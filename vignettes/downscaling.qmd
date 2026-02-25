@@ -1,0 +1,217 @@
+---
+title: "Statistical Downscaling with CCA"
+format: html
+vignette: >
+  %\VignetteIndexEntry{Statistical Downscaling with CCA}
+  %\VignetteEngine{quarto::html}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r}
+#| label: setup
+#| message: false
+library(tidyeof)
+library(stars)
+library(dplyr)
+library(ggplot2)
+```
+
+## Overview
+
+`tidyeof` supports statistical downscaling via Canonical Correlation Analysis (CCA). The workflow is:
+
+1. Extract EOF patterns from both predictor (coarse) and response (fine) fields
+2. Couple them with CCA to find correlated modes of co-variability
+3. Predict fine-scale fields from new coarse-scale data
+
+This vignette demonstrates the full downscaling pipeline.
+
+## Setup: predictor and response data
+
+For this vignette, we create a synthetic downscaling problem. The "fine" field is the bundled PRISM temperature data. The "coarse" field is derived by spatially aggregating it (simulating a coarse-resolution model).
+
+```{r}
+#| label: load-data
+# Fine-resolution "observations"
+fine <- system.file("testdata/prism_test.RDS", package = "tidyeof") |>
+  readRDS()
+
+# Coarse-resolution "model" -- aggregate to ~5x coarser grid
+# In practice, this would be a GCM or reanalysis product
+coarse <- fine |>
+  st_warp(cellsize = 0.2, method = "average", use_gdal = TRUE, no_data_value = -99999) |>
+  setNames(names(fine)) |>
+  st_set_dimensions("band",
+    values = st_get_dimension_values(fine, "time"),
+    names = "time")
+```
+
+```{r}
+#| label: show-grids
+#| fig-width: 8
+#| fig-height: 3
+p1 <- ggplot() + geom_stars(data = fine[,,,1]) +
+  scale_fill_viridis_c(na.value = NA) + coord_sf() + theme_void() + ggtitle("Fine (PRISM)")
+p2 <- ggplot() + geom_stars(data = coarse[,,,1]) +
+  scale_fill_viridis_c(na.value = NA) + coord_sf() + theme_void() + ggtitle("Coarse (aggregated)")
+patchwork::wrap_plots(p1, p2)
+```
+
+## Step 1: Extract patterns
+
+Extract EOF patterns from both fields. The number of modes `k` controls how much spatial detail is retained. More modes capture finer structure but risk overfitting in the CCA step.
+
+```{r}
+#| label: patterns
+pred_pat <- patterns(coarse, k = 5)
+resp_pat <- patterns(fine, k = 5)
+```
+
+```{r}
+#| label: plot-patterns
+#| fig-width: 10
+#| fig-height: 4
+plot(pred_pat, type = "eofs") + ggtitle("Predictor EOFs (coarse)")
+```
+
+```{r}
+#| label: plot-resp-patterns
+#| fig-width: 10
+#| fig-height: 4
+plot(resp_pat, type = "eofs") + ggtitle("Response EOFs (fine)")
+```
+
+## Step 2: Couple with CCA
+
+`couple()` finds the linear combinations of predictor and response PCs that are maximally correlated. The `k` argument controls how many CCA modes to retain.
+
+```{r}
+#| label: couple
+coupled <- couple(pred_pat, resp_pat, k = 3)
+coupled
+```
+
+### Diagnostics
+
+Inspect the canonical correlations -- these indicate the strength of the predictor-response relationship for each mode:
+
+```{r}
+#| label: correlations
+get_canonical_correlations(coupled)
+```
+
+```{r}
+#| label: plot-correlations
+#| fig-width: 5
+#| fig-height: 3
+plot(coupled, type = "correlations")
+```
+
+Visualize canonical variates (the optimally-correlated time series from each side):
+
+```{r}
+#| label: canonical-variates
+#| fig-width: 8
+#| fig-height: 4
+plot(coupled, type = "canonical", side = "both")
+```
+
+Canonical spatial patterns show what spatial structures in the predictor correspond to what structures in the response:
+
+```{r}
+#| label: canonical-patterns
+#| fig-width: 8
+#| fig-height: 6
+plot(coupled, type = "canonical_patterns", side = "both")
+```
+
+The combined view shows everything together:
+
+```{r}
+#| label: combined-view
+#| fig-width: 10
+#| fig-height: 12
+plot(coupled)
+```
+
+## Step 3: Predict
+
+`predict()` takes new coarse-resolution data and produces a fine-resolution prediction. Internally it: projects the new data onto predictor EOFs, applies the CCA transform, multiplies by response EOFs, and adds the response climatology.
+
+```{r}
+#| label: predict
+# Use the training data as a test (perfect predictor scenario)
+predicted <- predict(coupled, coarse)
+```
+
+```{r}
+#| label: compare
+#| fig-width: 8
+#| fig-height: 6
+# Compare a single time step
+t_idx <- 12
+p1 <- ggplot() + geom_stars(data = fine[,,,t_idx]) +
+  scale_fill_viridis_c(na.value = NA) + coord_sf() + theme_void() +
+  ggtitle("Observed (fine)")
+p2 <- ggplot() + geom_stars(data = predicted[,,,t_idx]) +
+  scale_fill_viridis_c(na.value = NA) + coord_sf() + theme_void() +
+  ggtitle("Predicted (downscaled)")
+patchwork::wrap_plots(p1, p2)
+```
+
+### Amplitudes only
+
+If you don't need the full spatial reconstruction (e.g., for diagnostics), set `reconstruct = FALSE` to get predicted response amplitudes directly:
+
+```{r}
+#| label: amps-only
+pred_amps <- predict(coupled, coarse, reconstruct = FALSE)
+head(pred_amps)
+```
+
+## Common patterns for multi-source downscaling
+
+When downscaling across multiple data sources (e.g., multiple reanalyses or model runs), use `common_patterns()` to extract shared EOF patterns. This ensures all sources are projected into the same EOF space, making their amplitudes directly comparable.
+
+```{r}
+#| label: common-patterns
+# Simulate two "sources" by splitting the time series
+times <- st_get_dimension_values(coarse, "time")
+source_a <- filter(coarse, time <= times[18])
+source_b <- filter(coarse, time > times[18])
+
+cpat <- common_patterns(list(a = source_a, b = source_b), k = 4, weight = TRUE)
+cpat
+```
+
+Each source gets its own patterns object with source-specific amplitudes and climatology, but shared EOF spatial patterns:
+
+```{r}
+#| label: common-congruence
+# The spatial patterns are identical; only amplitudes and climatology differ
+cpat$a$eofs
+cpat$b$eofs
+```
+
+You can then couple one source's patterns with fine-scale observations, and predict using another source's patterns via the `predictor_patterns` argument:
+
+```{r}
+#| label: cross-source
+#| eval: false
+# Train CCA using source A
+coupled_a <- couple(cpat$a, resp_pat, k = 3)
+
+# Predict using source B's data, with B's climatology
+predict(coupled_a, source_b_new, predictor_patterns = cpat$b)
+```
+
+## Next steps
+
+- See `vignette("cross-validation")` for tuning `k_pred`, `k_resp`, and `k_cca`
+- The `reconstruct()` function can also be used standalone for EOF-based field reconstruction (see `vignette("eof-analysis")`)
+
+## References
+
+- Barnett, T.P. & Preisendorfer, R. (1987). Origins and levels of monthly and seasonal forecast skill for United States surface air temperatures determined by canonical correlation analysis. *Monthly Weather Review*, 115(9), 1825-1850.
+- Bretherton, C.S., Smith, C., & Wallace, J.M. (1992). An intercomparison of methods for finding coupled patterns in climate data. *Journal of Climate*, 5(6), 541-560.
+- von Storch, H. & Zwiers, F.W. (1999). *Statistical Analysis in Climate Research*. Cambridge University Press.

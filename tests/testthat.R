@@ -1,4 +1,6 @@
 library(testthat)
-library(tidyEOF)
+library(tidyeof)
+prism <- system.file('testdata/prism_test.RDS', package = 'tidyeof') %>%
+  readRDS()
 
-test_check("tidyEOF")
+test_check("tidyeof")

@@ -13,3 +13,8 @@ tmp/
 *.png
 *.zip
 *.tif
+..Rcheck/
+*.tar.gz
+docs/
+inst/doc/
+build.log

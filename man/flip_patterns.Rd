@@ -2,13 +2,19 @@
 % Please edit documentation in R/align_patterns.R
 \name{flip_patterns}
 \alias{flip_patterns}
-\title{Title}
+\title{Flip EOF patterns to have consistent sign}
 \usage{
 flip_patterns(patterns)
 }
 \arguments{
-\item{patterns}{}
+\item{patterns}{A patterns object from patterns()}
+}
+\value{
+The patterns object with signs adjusted for consistency
 }
 \description{
-Title
+Ensures all EOF patterns have positive-dominant loadings by flipping the sign
+of both the spatial pattern and corresponding amplitude time series when needed.
+This makes plotting and interpretation more consistent across analyses.
 }
+\keyword{internal}
