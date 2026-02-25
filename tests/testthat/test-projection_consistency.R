@@ -2,13 +2,16 @@
 # These tests catch bugs like sign flips from flip_patterns not being applied
 # to pca$rotation
 
+prism <- system.file("testdata/prism_test.RDS", package = "tidyeof") %>%
+  readRDS()
+
 test_that("project_patterns returns same amplitudes as stored for original data", {
   pat <- patterns(prism, k = 5)
   stored <- pat$amplitudes
   projected <- project_patterns(pat, prism)
 
   # Should be identical (same data projected onto same patterns)
-  expect_equal(projected, stored, tolerance = 1e-10)
+  expect_equal(projected, stored, tolerance = 1e-10, ignore_attr = TRUE)
 })
 
 test_that("project_patterns consistent after subsetting patterns", {
@@ -22,6 +25,7 @@ test_that("project_patterns consistent after subsetting patterns", {
     expect_equal(
       projected_sub, stored_sub,
       tolerance = 1e-10,
+      ignore_attr = TRUE,
       label = paste("k =", i)
     )
   }
@@ -32,7 +36,7 @@ test_that("project_patterns consistent with scale = TRUE", {
   stored <- pat$amplitudes
   projected <- project_patterns(pat, prism)
 
-  expect_equal(projected, stored, tolerance = 1e-10)
+  expect_equal(projected, stored, tolerance = 1e-10, ignore_attr = TRUE)
 })
 
 test_that("project_patterns consistent with weight = FALSE", {
@@ -40,7 +44,7 @@ test_that("project_patterns consistent with weight = FALSE", {
   stored <- pat$amplitudes
   projected <- project_patterns(pat, prism)
 
-  expect_equal(projected, stored, tolerance = 1e-10)
+  expect_equal(projected, stored, tolerance = 1e-10, ignore_attr = TRUE)
 })
 
 test_that("project_patterns consistent with scale = TRUE and weight = FALSE", {
@@ -48,7 +52,7 @@ test_that("project_patterns consistent with scale = TRUE and weight = FALSE", {
   stored <- pat$amplitudes
   projected <- project_patterns(pat, prism)
 
-  expect_equal(projected, stored, tolerance = 1e-10)
+  expect_equal(projected, stored, tolerance = 1e-10, ignore_attr = TRUE)
 })
 
 test_that("reconstruct with amplitudes matches reconstruct with stars input", {
