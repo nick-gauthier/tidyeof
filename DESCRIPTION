@@ -30,6 +30,7 @@ Imports:
     glue,
     cli,
     stars,
+    cubelyr,
     dplyr,
     tidyr,
     sf,
