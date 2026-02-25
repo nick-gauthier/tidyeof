@@ -194,6 +194,27 @@ get_anomalies <- function(dat, clim = NULL, scale = FALSE, monthly = FALSE) {
 }
 
 
+#' Restore original field from anomalies and climatology
+#'
+#' Reverses the operation of \code{get_anomalies()}, adding the climatological
+#' mean (and optionally multiplying by standard deviation) back to anomaly fields.
+#'
+#' @param anomalies A stars object containing anomalies (from \code{get_anomalies()})
+#' @param clim A climatology list with \code{mean} and \code{sd} stars objects
+#'   (from \code{get_climatology()})
+#' @param scale Logical. If TRUE, multiply by standard deviation before adding mean
+#'   (use when anomalies were standardized)
+#' @param monthly Logical. If TRUE, restore using monthly climatology
+#'
+#' @return A stars object with the original field restored
+#'
+#' @examples
+#' \dontrun{
+#' clim <- get_climatology(dat)
+#' anom <- get_anomalies(dat, clim)
+#' restored <- restore_climatology(anom, clim)
+#' }
+#'
 #' @export
 restore_climatology <- function(anomalies, clim, scale = FALSE, monthly = FALSE) {
   # Basic validation
